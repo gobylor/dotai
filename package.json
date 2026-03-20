@@ -1,0 +1,30 @@
+{
+  "name": "dotai",
+  "version": "0.1.0",
+  "description": "AI CLI config manager — sync Claude Code, Codex, and more between machines",
+  "type": "module",
+  "bin": {
+    "dotai": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "bun build src/cli.ts --outdir dist --target node && cp -r src/profiles dist/profiles",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "dev": "bun run src/cli.ts"
+  },
+  "keywords": ["dotfiles", "ai", "claude-code", "codex", "config", "sync"],
+  "license": "MIT",
+  "files": ["dist/"],
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "chalk": "^5.6.2",
+    "commander": "^14.0.3"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.0"
+  }
+}

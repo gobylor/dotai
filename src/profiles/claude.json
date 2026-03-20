@@ -1,0 +1,8 @@
+{
+  "name": "claude",
+  "description": "Claude Code by Anthropic",
+  "configDir": "~/.claude",
+  "portable": ["settings.json", "commands/", "skills/", "plugins/config.json", "plugins/installed_plugins.json", "statusline-command.sh"],
+  "ephemeral": ["sessions/", "session-env/", "cache/", "shell-snapshots/", "debug/", "paste-cache/", "file-history/", "plans/", "ide/", "backups/", "history.jsonl", ".session-stats.json", "policy-limits.json", "mcp-needs-auth-cache.json", "statsig/", "stats-cache.json", "plugins/cache/"],
+  "credentials": ["auth.json"]
+}

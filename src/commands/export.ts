@@ -1,7 +1,7 @@
-import { existsSync, statSync, writeFileSync } from "node:fs";
+import { statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { copyFile, copyDir } from "../lib/fileops.js";
-import { expandHome } from "../lib/resolve.js";
+import { resolveFiles } from "../lib/resolve.js";
 import { generateReadme } from "../lib/readme.js";
 import type { Manifest } from "../types.js";
 
@@ -26,24 +26,24 @@ export function runExport(options: ExportOptions): ExportResult {
   for (const toolName of toolNames) {
     const tool = manifest.tools[toolName];
     if (!tool) continue;
-    const machineBase = expandHome(tool.source);
-    const repoBase = join(repoDir, toolName);
 
-    for (const inc of tool.include) {
-      const machinePath = join(machineBase, inc);
-      const repoPath = join(repoBase, inc);
-      if (!existsSync(machinePath)) {
-        if (verbose) console.log(`  ⚠ ${toolName}: ${inc} not found, skipping`);
-        continue;
+    const resolved = resolveFiles(manifest, repoDir, toolName);
+
+    for (const file of resolved.files) {
+      // Export machine-only and modified files to repo
+      if (file.state === "machine-only" || file.state === "modified") {
+        try {
+          if (statSync(file.machinePath).isDirectory()) {
+            copyDir(file.machinePath, file.repoPath);
+          } else {
+            copyFile(file.machinePath, file.repoPath);
+          }
+          if (verbose) console.log(`  ${toolName}: ${file.relativePath}`);
+          filesCopied++;
+        } catch {
+          if (verbose) console.log(`  ⚠ ${toolName}: ${file.relativePath} skipped (error)`);
+        }
       }
-      if (statSync(machinePath).isDirectory()) {
-        copyDir(machinePath, repoPath);
-        if (verbose) console.log(`  ${toolName}: ${inc} (directory)`);
-      } else {
-        copyFile(machinePath, repoPath);
-        if (verbose) console.log(`  ${toolName}: ${inc}`);
-      }
-      filesCopied++;
     }
     toolsExported.push(toolName);
   }

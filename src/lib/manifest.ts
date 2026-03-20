@@ -7,7 +7,12 @@ export function parseManifest(jsonString: string): Manifest {
 
 export function readManifest(filePath: string): Manifest {
   const content = readFileSync(filePath, "utf-8");
-  return parseManifest(content);
+  const data = parseManifest(content);
+  const errors = validateManifest(data);
+  if (errors.length > 0) {
+    throw new Error(`Invalid dotai.json:\n${errors.map((e) => `  - ${e}`).join("\n")}`);
+  }
+  return data;
 }
 
 export function validateManifest(data: any): string[] {

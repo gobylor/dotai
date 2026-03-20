@@ -92,16 +92,20 @@ function walkDir(dir: string, base: string, out: Set<string>): void {
 
 function isExcluded(relPath: string, patterns: string[]): boolean {
   for (const pattern of patterns) {
-    if (pattern.endsWith("/") && (relPath.startsWith(pattern) || relPath.startsWith(pattern.slice(0, -1)))) {
-      return true;
+    // Directory pattern: "cache/" matches "cache/foo" and "cache" but not "cachemore"
+    if (pattern.endsWith("/")) {
+      if (relPath.startsWith(pattern) || relPath === pattern.slice(0, -1)) {
+        return true;
+      }
     }
-    if (pattern.startsWith("*") && relPath.endsWith(pattern.slice(1))) {
-      return true;
+    // Glob pattern: "*.sqlite" matches "state.sqlite"
+    else if (pattern.startsWith("*")) {
+      if (relPath.endsWith(pattern.slice(1))) {
+        return true;
+      }
     }
-    if (relPath === pattern) {
-      return true;
-    }
-    if (relPath.startsWith(pattern)) {
+    // Exact match only
+    else if (relPath === pattern) {
       return true;
     }
   }

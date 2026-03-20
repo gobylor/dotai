@@ -108,10 +108,11 @@ program
 program
   .command("status")
   .description("Sync summary dashboard")
-  .action(() => {
+  .option("--only <tool>", "Status for only one tool")
+  .action((opts) => {
     const repoDir = process.cwd();
     const manifest = getManifest(repoDir);
-    const result = runStatus({ manifest, repoDir });
+    const result = runStatus({ manifest, repoDir, only: opts.only });
     for (const tool of result.tools) {
       console.log(chalk.bold(`${tool.name}: `) +
         `${tool.counts["in-sync"]} synced, ` +

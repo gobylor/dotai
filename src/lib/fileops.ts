@@ -54,14 +54,19 @@ export function createBackup(sourceDir: string, backupBase: string, label: strin
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
   const backupDir = join(backupBase, `backup-${timestamp}`, label);
   mkdirSync(backupDir, { recursive: true });
-  copyDir(sourceDir, backupDir);
+  // Use cpSync for faithful backup — preserves .git, unlike copyDir which strips it
+  cpSync(sourceDir, backupDir, { recursive: true });
   return backupDir;
 }
 
 export function filesAreEqual(pathA: string, pathB: string): boolean {
-  const a = readFileSync(pathA);
-  const b = readFileSync(pathB);
-  return a.equals(b);
+  try {
+    const a = readFileSync(pathA);
+    const b = readFileSync(pathB);
+    return a.equals(b);
+  } catch {
+    return false; // If either file can't be read, treat as different
+  }
 }
 
 export function deleteFile(filePath: string): void {

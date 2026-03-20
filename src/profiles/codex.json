@@ -1,0 +1,8 @@
+{
+  "name": "codex",
+  "description": "Codex CLI by OpenAI",
+  "configDir": "~/.codex",
+  "portable": ["config.toml", "rules/", "skills/", "prompts/"],
+  "ephemeral": ["history.jsonl", "sessions/", "log/", "*.sqlite", "models_cache.json", "shell_snapshots/", "tmp/", ".codex-global-state.json", "version.json"],
+  "credentials": ["auth.json"]
+}

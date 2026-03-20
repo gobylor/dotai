@@ -4,4 +4,5 @@ dist/
 .DS_Store
 
 # Design & planning docs (not shipped with tool)
-*.md
+TODOS.md
+docs/

@@ -2,11 +2,14 @@ import {
   copyFileSync,
   cpSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   readFileSync,
   readdirSync,
+  readlinkSync,
   rmSync,
   statSync,
+  symlinkSync,
 } from "node:fs";
 import { join, dirname } from "node:path";
 
@@ -29,8 +32,20 @@ function _copyDirRecursive(src: string, dst: string): void {
     if (entry.isDirectory()) {
       mkdirSync(dstPath, { recursive: true });
       _copyDirRecursive(srcPath, dstPath);
-    } else if (entry.isFile() || entry.isSymbolicLink()) {
-      copyFileSync(srcPath, dstPath);
+    } else if (entry.isSymbolicLink()) {
+      // Preserve symlinks — copy the link itself, not the target
+      try {
+        const target = readlinkSync(srcPath);
+        symlinkSync(target, dstPath);
+      } catch {
+        // Skip broken or unsupported symlinks
+      }
+    } else if (entry.isFile()) {
+      try {
+        copyFileSync(srcPath, dstPath);
+      } catch {
+        // Skip files that can't be copied (sockets, special files)
+      }
     }
   }
 }
@@ -39,7 +54,7 @@ export function createBackup(sourceDir: string, backupBase: string, label: strin
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
   const backupDir = join(backupBase, `backup-${timestamp}`, label);
   mkdirSync(backupDir, { recursive: true });
-  cpSync(sourceDir, backupDir, { recursive: true });
+  copyDir(sourceDir, backupDir);
   return backupDir;
 }
 

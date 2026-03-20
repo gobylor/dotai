@@ -56,7 +56,14 @@ export function resolveFiles(
 
     let state: FileState;
     if (inRepo && onMachine) {
-      state = filesAreEqual(repoPath, machinePath) ? "in-sync" : "modified";
+      // Only compare regular files, not directories
+      const repoIsFile = statSync(repoPath).isFile();
+      const machineIsFile = statSync(machinePath).isFile();
+      if (repoIsFile && machineIsFile) {
+        state = filesAreEqual(repoPath, machinePath) ? "in-sync" : "modified";
+      } else {
+        state = "in-sync"; // directories that exist in both are considered in-sync
+      }
     } else if (inRepo) {
       state = "repo-only";
     } else {

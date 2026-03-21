@@ -1,10 +1,10 @@
 {
   "name": "@openlor/dotai",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "AI CLI config manager — sync Claude Code, Codex, and more between machines",
   "type": "module",
   "bin": {
-    "dotai": "./dist/cli.js"
+    "dotai": "dist/cli.js"
   },
   "scripts": {
     "build": "bun build src/cli.ts --outdir dist --target node && cp -r src/profiles dist/profiles",
@@ -12,9 +12,18 @@
     "test:watch": "vitest",
     "dev": "bun run src/cli.ts"
   },
-  "keywords": ["dotfiles", "ai", "claude-code", "codex", "config", "sync"],
+  "keywords": [
+    "dotfiles",
+    "ai",
+    "claude-code",
+    "codex",
+    "config",
+    "sync"
+  ],
   "license": "MIT",
-  "files": ["dist/"],
+  "files": [
+    "dist/"
+  ],
   "engines": {
     "node": ">=18"
   },

@@ -13,7 +13,14 @@ import { runUse } from "./commands/use.js";
 import { runDoctor } from "./commands/doctor.js";
 import type { FileState } from "./types.js";
 
-const BACKUP_BASE = join(process.env.HOME || "", ".dotai-backup");
+function getBackupBase(): string {
+  const home = process.env.HOME;
+  if (!home) {
+    console.error("HOME environment variable is not set.");
+    process.exit(1);
+  }
+  return join(home, ".dotai-backup");
+}
 
 function getManifest(repoDir: string) {
   const manifestPath = join(repoDir, "dotai.json");
@@ -66,7 +73,7 @@ program
     const manifest = getManifest(repoDir);
     const result = runImport({
       manifest, repoDir, verbose: opts.verbose, dryRun: opts.dryRun,
-      sync: opts.sync, only: opts.only, backupBase: BACKUP_BASE,
+      sync: opts.sync, only: opts.only, backupBase: getBackupBase(),
     });
     if (opts.dryRun) {
       console.log(chalk.yellow("Dry run — no changes made."));
@@ -131,7 +138,7 @@ program
   .option("--dry-run", "Show what would change without writing", false)
   .option("--verbose", "Show details", false)
   .action((repo, opts) => {
-    runUse({ repoArg: repo, dryRun: opts.dryRun, verbose: opts.verbose, backupBase: BACKUP_BASE });
+    runUse({ repoArg: repo, dryRun: opts.dryRun, verbose: opts.verbose, backupBase: getBackupBase() });
     if (!opts.dryRun) console.log(chalk.green("✅ Config imported successfully"));
   });
 

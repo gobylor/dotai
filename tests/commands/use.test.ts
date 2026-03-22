@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { parseRepoArg, validateExternalManifest } from "../../src/commands/use";
+import { parseRepoArg, runUse, validateExternalManifest } from "../../src/commands/use";
+import { createTempDir, cleanupTempDir } from "../helpers";
 
 describe("use command", () => {
   it("parses user/repo format", () => {
@@ -32,5 +33,27 @@ describe("use command", () => {
     };
     const errors = validateExternalManifest(manifest as any);
     expect(errors).toHaveLength(0);
+  });
+});
+
+describe("runUse error handling", () => {
+  it("throws friendly error when repo does not exist", () => {
+    const backupBase = createTempDir();
+    try {
+      expect(() =>
+        runUse({
+          repoArg: "nonexistent-user-zzz/nonexistent-repo-zzz",
+          dryRun: false,
+          verbose: false,
+          backupBase,
+        })
+      ).toThrow(/not found|does not exist|failed to clone/i);
+    } finally {
+      cleanupTempDir(backupBase);
+    }
+  });
+
+  it("throws friendly error for invalid repo format", () => {
+    expect(() => parseRepoArg("just-one-word")).toThrow("Invalid repo format");
   });
 });

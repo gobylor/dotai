@@ -58,9 +58,24 @@ export function runUse(options: {
 
   try {
     if (verbose) console.log(`Cloning ${ref.url}...`);
-    execFileSync("git", ["clone", "--depth", "1", ref.url, tempDir], {
-      stdio: verbose ? "inherit" : "pipe",
-    });
+    try {
+      execFileSync("git", ["clone", "--depth", "1", ref.url, tempDir], {
+        stdio: verbose ? "inherit" : "pipe",
+      });
+    } catch (err: any) {
+      rmSync(tempDir, { recursive: true, force: true });
+      if (err.code === "ENOENT") {
+        throw new Error("git is not installed. Install git and try again.");
+      }
+      const stderr = err.stderr?.toString() || "";
+      if (stderr.includes("not found") || stderr.includes("does not exist") || err.status === 128) {
+        throw new Error(
+          `Repository not found: ${ref.owner}/${ref.repo}. ` +
+          `Check the URL and ensure you have access.`
+        );
+      }
+      throw new Error(`Failed to clone ${ref.owner}/${ref.repo}: ${stderr || err.message}`);
+    }
 
     const manifestPath = join(tempDir, "dotai.json");
     if (!existsSync(manifestPath)) {

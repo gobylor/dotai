@@ -1,6 +1,6 @@
 {
   "name": "@openlor/dotai",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "AI CLI config manager — sync Claude Code, Codex, and more between machines",
   "type": "module",
   "bin": {
@@ -10,7 +10,8 @@
     "build": "bun build src/cli.ts --outdir dist --target node && cp -r src/profiles dist/profiles",
     "test": "vitest run",
     "test:watch": "vitest",
-    "dev": "bun run src/cli.ts"
+    "dev": "bun run src/cli.ts",
+    "prepublishOnly": "bun run test && bun run build"
   },
   "keywords": [
     "dotfiles",

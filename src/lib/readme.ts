@@ -9,7 +9,7 @@ export function generateReadme(manifest: Manifest): string {
     "## Quick Start",
     "",
     "```bash",
-    "npx dotai use <this-repo>",
+    "npx @openlor/dotai use <this-repo>",
     "```",
     "",
     "## Managed Tools",

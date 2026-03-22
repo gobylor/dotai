@@ -14,13 +14,13 @@ AI CLI config manager — sync Claude Code, Codex, and more between machines.
 
 ```bash
 # In your config repo directory:
-npx dotai init          # Auto-discover CLIs, generate manifest
-npx dotai export        # Copy configs from machine to repo
+npx @openlor/dotai init          # Auto-discover CLIs, generate manifest
+npx @openlor/dotai export        # Copy configs from machine to repo
 git add -A && git commit -m "my ai config"
 git push
 
 # On another machine:
-npx dotai use <your-github-user>/dotai-config
+npx @openlor/dotai use <your-github-user>/dotai-config
 ```
 
 ## Commands
@@ -113,11 +113,11 @@ Every managed file is in one of four states:
 
 ```bash
 # Use without installing (recommended)
-npx dotai <command>
+npx @openlor/dotai <command>
 
 # Or install globally
-npm install -g dotai
-bun install -g dotai
+npm install -g @openlor/dotai
+bun install -g @openlor/dotai
 ```
 
 Requires Node.js >= 18 or Bun.

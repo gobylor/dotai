@@ -18,6 +18,14 @@ interface InitResult {
 
 export function runInit(options: InitOptions): InitResult {
   const { repoDir, homeDir } = options;
+  const manifestPath = join(repoDir, "dotai.json");
+  if (existsSync(manifestPath)) {
+    return {
+      manifestPath: null,
+      warnings: ["dotai.json already exists. Delete it first if you want to re-initialize."],
+      toolsFound: [],
+    };
+  }
   // Allow tests to override HOME
   const prevHome = process.env.HOME;
   if (homeDir) process.env.HOME = homeDir;
@@ -45,7 +53,6 @@ export function runInit(options: InitOptions): InitResult {
   }
 
   mkdirSync(repoDir, { recursive: true });
-  const manifestPath = join(repoDir, "dotai.json");
   writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n", "utf-8");
 
   const profileList = toolsFound.map((name) => profiles[name]);

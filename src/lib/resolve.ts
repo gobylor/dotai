@@ -5,7 +5,11 @@ import type { Manifest, ResolvedTool, ResolvedFile, FileState } from "../types.j
 
 export function expandHome(p: string): string {
   if (p.startsWith("~/")) {
-    return join(process.env.HOME || "", p.slice(2));
+    const home = process.env.HOME;
+    if (!home) {
+      throw new Error("HOME environment variable is not set. Cannot resolve path: " + p);
+    }
+    return join(home, p.slice(2));
   }
   return p;
 }

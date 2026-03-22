@@ -23,4 +23,15 @@ describe("profiles", () => {
     const profile = getProfile("unknown-tool");
     expect(profile).toBeNull();
   });
+  it("discovers all .json files in profiles directory", () => {
+    const profiles = loadBuiltinProfiles();
+    const names = Object.keys(profiles);
+    expect(names).toContain("claude");
+    expect(names).toContain("codex");
+    for (const profile of Object.values(profiles)) {
+      expect(profile.name).toBeDefined();
+      expect(profile.configDir).toBeDefined();
+      expect(Array.isArray(profile.portable)).toBe(true);
+    }
+  });
 });

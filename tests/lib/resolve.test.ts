@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { join } from "node:path";
 import { createTempDir, cleanupTempDir, writeFixture } from "../helpers";
-import { resolveFiles } from "../../src/lib/resolve";
+import { expandHome, resolveFiles } from "../../src/lib/resolve";
 import type { Manifest } from "../../src/types";
 
 let tempDir: string;
@@ -18,6 +18,28 @@ afterEach(() => { cleanupTempDir(tempDir); });
 function makeManifest(tool: string, source: string, include: string[]): Manifest {
   return { version: 1, tools: { [tool]: { source, include, exclude: [] } } };
 }
+
+describe("expandHome", () => {
+  it("throws when HOME is undefined and path starts with ~", () => {
+    const origHome = process.env.HOME;
+    delete process.env.HOME;
+    try {
+      expect(() => expandHome("~/.claude")).toThrow("HOME environment variable is not set");
+    } finally {
+      process.env.HOME = origHome;
+    }
+  });
+
+  it("returns non-tilde paths unchanged even without HOME", () => {
+    const origHome = process.env.HOME;
+    delete process.env.HOME;
+    try {
+      expect(expandHome("/absolute/path")).toBe("/absolute/path");
+    } finally {
+      process.env.HOME = origHome;
+    }
+  });
+});
 
 describe("resolveFiles", () => {
   it("detects in-sync files", () => {

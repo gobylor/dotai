@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ToolProfile } from "../types.js";
@@ -8,8 +8,8 @@ const PROFILES_DIR = join(__dirname, "..", "profiles");
 
 export function loadBuiltinProfiles(): Record<string, ToolProfile> {
   const profiles: Record<string, ToolProfile> = {};
-  const profileFiles = ["claude.json", "codex.json"];
-  for (const file of profileFiles) {
+  const entries = readdirSync(PROFILES_DIR).filter((f) => f.endsWith(".json"));
+  for (const file of entries) {
     const content = readFileSync(join(PROFILES_DIR, file), "utf-8");
     const profile: ToolProfile = JSON.parse(content);
     profiles[profile.name] = profile;

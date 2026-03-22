@@ -28,6 +28,16 @@ describe("init command", () => {
     expect(gitignore).toContain("auth.json");
   });
 
+  it("returns warning and skips when dotai.json already exists", () => {
+    const repoDir = join(tempDir, "repo");
+    writeFixture(repoDir, "dotai.json", '{"version":1,"tools":{"custom":{"source":"~/.custom","include":["x"],"exclude":[]}}}');
+    const result = runInit({ repoDir, homeDir: tempDir });
+    expect(result.warnings[0]).toContain("already exists");
+    // Verify the existing manifest was NOT overwritten
+    const content = readFileSync(join(repoDir, "dotai.json"), "utf-8");
+    expect(content).toContain("custom");
+  });
+
   it("creates empty manifest when no CLIs found", () => {
     const repoDir = join(tempDir, "repo");
     const result = runInit({ repoDir, homeDir: tempDir });

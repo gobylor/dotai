@@ -68,4 +68,11 @@ describe("isKnownConfigDir", () => {
   it("rejects similar-prefix dirs like ~/.claude-evil", () => {
     expect(isKnownConfigDir("~/.claude-evil")).toBe(false);
   });
+
+  it("rejects absolute path traversal bypassing tilde expansion", () => {
+    const home = process.env.HOME || "/Users/test";
+    // Absolute path that starts with known dir but contains ../ to escape
+    expect(isKnownConfigDir(`${home}/.claude/../.ssh`)).toBe(false);
+    expect(isKnownConfigDir(`${home}/.claude/skills/../../../etc`)).toBe(false);
+  });
 });

@@ -43,13 +43,16 @@ export function validateManifest(data: any): string[] {
 const KNOWN_CONFIG_DIRS = ["~/.claude", "~/.codex", "~/.cursor", "~/.windsurf", "~/.aider"];
 
 export function isKnownConfigDir(source: string): boolean {
-  // Normalize: expand ~ and resolve ../ sequences
+  // Normalize: expand ~ and resolve ../ sequences for ALL paths (tilde and absolute)
   const home = process.env.HOME || "/nonexistent";
-  const expandTilde = (p: string) => p.startsWith("~/") ? resolve(home, p.slice(2)) : p;
+  const normalize = (p: string) => {
+    const expanded = p.startsWith("~/") ? resolve(home, p.slice(2)) : resolve(p);
+    return expanded;
+  };
 
-  const resolved = expandTilde(source);
+  const resolved = normalize(source);
   return KNOWN_CONFIG_DIRS.some((dir) => {
-    const resolvedDir = expandTilde(dir);
+    const resolvedDir = normalize(dir);
     return resolved === resolvedDir || resolved.startsWith(resolvedDir + "/");
   });
 }

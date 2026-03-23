@@ -275,6 +275,23 @@ describe("restoreClaudePlugins", () => {
     expect(result.pluginsInstalled).toHaveLength(0);
   });
 
+  it("records marketplace add failure in marketplacesFailed", () => {
+    mockExecFileSync
+      .mockReturnValueOnce(Buffer.from(""))  // marketplace list
+      .mockImplementationOnce(() => { throw new Error("marketplace add failed"); }) // marketplace add fails
+      .mockReturnValueOnce(Buffer.from("")); // plugin list
+
+    const result = restoreClaudePlugins({
+      installedPluginsJson: RESTORE_INSTALLED_JSON,
+      knownMarketplacesJson: RESTORE_MARKETPLACES_JSON,
+      dryRun: false,
+      verbose: false,
+    });
+
+    expect(result.marketplacesFailed).toEqual(["claude-plugins-official"]);
+    expect(result.marketplacesAdded).toEqual([]);
+  });
+
   it("continues when individual plugin install fails", () => {
     const twoPluginsJson = JSON.stringify({
       version: 2,

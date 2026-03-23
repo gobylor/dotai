@@ -32,8 +32,8 @@ export function parseInstalledPlugins(json: string): ParsedPlugin[] {
   const data = JSON.parse(json);
   const plugins: ParsedPlugin[] = [];
   for (const [key, entries] of Object.entries(data.plugins ?? {})) {
-    const arr = entries as any[];
-    if (arr.length === 0) continue;
+    if (!Array.isArray(entries) || entries.length === 0) continue;
+    const arr = entries;
     // Sort by installedAt descending, take most recent
     const sorted = [...arr].sort(
       (a, b) => new Date(b.installedAt).getTime() - new Date(a.installedAt).getTime()
@@ -49,8 +49,10 @@ export function parseKnownMarketplaces(json: string): ParsedMarketplace[] {
   const marketplaces: ParsedMarketplace[] = [];
   for (const [name, entry] of Object.entries(data)) {
     const e = entry as any;
-    const source = e.source;
+    const source = e?.source;
+    if (!source) continue;
     const addArg = source.source === "github" ? source.repo : source.url;
+    if (typeof addArg !== "string" || !addArg) continue;
     marketplaces.push({ name, addArg });
   }
   return marketplaces;
@@ -85,6 +87,22 @@ export function getMarketplacesToRestore(marketplaces: ParsedMarketplace[], alre
     }
   }
   return { toAdd, skipped };
+}
+
+// --- Validation ---
+
+// Reject CLI arguments that could be argument injection (starting with -)
+// or contain unexpected characters
+const SAFE_PLUGIN_KEY = /^[a-zA-Z0-9_.-]+@[a-zA-Z0-9_.-]+$/;
+const SAFE_MARKETPLACE_ARG = /^[a-zA-Z0-9_.\-/]+$/;
+const SAFE_MARKETPLACE_URL = /^https?:\/\/.+$/;
+
+function isSafeMarketplaceArg(arg: string): boolean {
+  return SAFE_MARKETPLACE_ARG.test(arg) || SAFE_MARKETPLACE_URL.test(arg);
+}
+
+function isSafePluginKey(key: string): boolean {
+  return SAFE_PLUGIN_KEY.test(key);
 }
 
 // --- Restore execution ---
@@ -153,6 +171,10 @@ export function restoreClaudePlugins(opts: RestoreOptions): PluginRestoreResult 
   result.marketplacesSkipped = mktFilter.skipped.map((m) => m.name);
 
   for (const mkt of mktFilter.toAdd) {
+    if (!isSafeMarketplaceArg(mkt.addArg)) {
+      result.marketplacesFailed.push(mkt.name);
+      continue;
+    }
     try {
       execFileSync("claude", ["plugins", "marketplace", "add", mkt.addArg], {
         stdio: "pipe",
@@ -181,6 +203,10 @@ export function restoreClaudePlugins(opts: RestoreOptions): PluginRestoreResult 
   result.pluginsWarned = pluginFilter.warned.map((p) => p.key);
 
   for (const plugin of pluginFilter.toInstall) {
+    if (!isSafePluginKey(plugin.key)) {
+      result.pluginsFailed.push(plugin.key);
+      continue;
+    }
     try {
       if (verbose) {
         console.log(`Installing plugin: ${plugin.key}`);

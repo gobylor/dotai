@@ -100,7 +100,7 @@ export interface PluginRestoreResult {
   claudeCliMissing?: boolean;
 }
 
-interface RestoreOptions {
+export interface RestoreOptions {
   installedPluginsJson: string;
   knownMarketplacesJson: string;
   dryRun: boolean;
@@ -123,7 +123,9 @@ export function restoreClaudePlugins(opts: RestoreOptions): PluginRestoreResult 
     pluginsFailed: [],
   };
 
-  // Dry-run: compute what would happen without executing any CLI commands
+  // Dry-run: compute what would happen without executing any CLI commands.
+  // Uses empty sets (treats everything as "not installed") because dry-run must
+  // work even without the claude CLI installed. May over-report installs.
   if (dryRun) {
     const mktFilter = getMarketplacesToRestore(marketplaces, new Set());
     const pluginFilter = getPluginsToRestore(plugins, new Set());
@@ -196,6 +198,9 @@ export function restoreClaudePlugins(opts: RestoreOptions): PluginRestoreResult 
   return result;
 }
 
+// Parses `claude plugins marketplace list` tabular output.
+// Expected format: one marketplace name per line (first whitespace-delimited token).
+// Filters out header rows, decorators, and "No marketplaces" messages.
 function getRegisteredMarketplaces(): Set<string> {
   const output = execFileSync("claude", ["plugins", "marketplace", "list"], {
     stdio: "pipe",
@@ -217,6 +222,8 @@ function getRegisteredMarketplaces(): Set<string> {
   return names;
 }
 
+// Parses `claude plugins list` tabular output.
+// Plugin keys contain "@" (e.g. "superpowers@claude-plugins-official").
 function getInstalledPluginKeys(): Set<string> {
   const output = execFileSync("claude", ["plugins", "list"], {
     stdio: "pipe",

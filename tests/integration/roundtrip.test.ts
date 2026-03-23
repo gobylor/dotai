@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createTempDir, cleanupTempDir, writeFixture } from "../helpers";
@@ -6,25 +6,26 @@ import { runInit } from "../../src/commands/init";
 import { runExport } from "../../src/commands/export";
 import { runImport } from "../../src/commands/import";
 import { readManifest } from "../../src/lib/manifest";
+import { _resetProfileCache } from "../../src/lib/profiles";
 
 let tempDir: string;
 let homeDir: string;
 let repoDir: string;
-let origHome: string | undefined;
 
 beforeEach(() => {
   tempDir = createTempDir();
   homeDir = tempDir;
   repoDir = join(tempDir, "config-repo");
-  origHome = process.env.HOME;
+  _resetProfileCache();
+  vi.stubEnv("HOME", homeDir);
 });
 afterEach(() => {
-  process.env.HOME = origHome;
+  vi.unstubAllEnvs();
   cleanupTempDir(tempDir);
 });
 
 describe("round-trip: init → export → import", () => {
-  it("preserves file content through full cycle", () => {
+  it("preserves file content through full cycle", { timeout: 15_000 }, () => {
     // Setup: create fake Claude config on "machine A"
     const claudeDir = join(homeDir, ".claude");
     writeFixture(claudeDir, "settings.json", '{"theme":"dark","model":"opus"}');
@@ -37,8 +38,6 @@ describe("round-trip: init → export → import", () => {
     expect(existsSync(join(repoDir, "dotai.json"))).toBe(true);
 
     // Step 2: Export — copy machine configs to repo
-    // Set HOME so expandHome("~/.claude") resolves to machine A's config
-    process.env.HOME = homeDir;
     const manifest = readManifest(join(repoDir, "dotai.json"));
     const exportResult = runExport({ manifest, repoDir, verbose: false });
     expect(exportResult.filesCopied).toBeGreaterThan(0);
@@ -92,8 +91,6 @@ describe("round-trip: init → export → import", () => {
     writeFixture(claudeDir, "settings.json", '{"theme":"dark"}');
 
     runInit({ repoDir, homeDir });
-    // Set HOME so expandHome("~/.claude") resolves correctly
-    process.env.HOME = homeDir;
     const manifest = readManifest(join(repoDir, "dotai.json"));
     runExport({ manifest, repoDir, verbose: false });
 

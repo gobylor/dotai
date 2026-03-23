@@ -98,8 +98,11 @@ Use `--skip-plugins` to disable, or `--dry-run` to preview.
 ### 5. Security
 
 - **No transformation** — files are copied exactly as-is
-- `dotai doctor` scans for credential files accidentally in repo
+- `dotai doctor` scans for credential files accidentally in repo (auth.json, *.key, *.pem, id_rsa, .netrc, and more)
 - `dotai use` restricts source paths to known AI CLI config directories
+- Plugin/marketplace arguments validated against strict regexes to prevent injection from untrusted repos
+- Marketplace URLs restricted to known Git hosts (github.com, gitlab.com, bitbucket.org) — extend via `DOTAI_ALLOWED_DOMAINS` env var
+- Symlinks in config directories are skipped to prevent path traversal attacks
 - Auto-generated `.gitignore` excludes credentials and ephemeral data
 
 ## Design Principles

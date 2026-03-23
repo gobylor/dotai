@@ -48,8 +48,8 @@ export function parseKnownMarketplaces(json: string): ParsedMarketplace[] {
   const data = JSON.parse(json);
   const marketplaces: ParsedMarketplace[] = [];
   for (const [name, entry] of Object.entries(data)) {
-    const e = entry as any;
-    const source = e?.source;
+    const e = entry as Record<string, unknown>;
+    const source = e?.source as Record<string, unknown> | null;
     if (!source) continue;
     const addArg = source.source === "github" ? source.repo : source.url;
     if (typeof addArg !== "string" || !addArg) continue;
@@ -93,12 +93,26 @@ export function getMarketplacesToRestore(marketplaces: ParsedMarketplace[], alre
 
 // Reject CLI arguments that could be argument injection (starting with -)
 // or contain unexpected characters
-const SAFE_PLUGIN_KEY = /^[a-zA-Z0-9_.-]+@[a-zA-Z0-9_.-]+$/;
-const SAFE_MARKETPLACE_ARG = /^[a-zA-Z0-9_.\-/]+$/;
-const SAFE_MARKETPLACE_URL = /^https?:\/\/.+$/;
+const SAFE_PLUGIN_KEY = /^[a-zA-Z0-9][a-zA-Z0-9_.-]*@[a-zA-Z0-9][a-zA-Z0-9_.-]*$/;
+const SAFE_MARKETPLACE_ARG = /^[a-zA-Z0-9][a-zA-Z0-9_.\-/]*$/;
+
+// Default allowed Git hosting domains. Reject RFC-1918, link-local, and localhost.
+const DEFAULT_SAFE_DOMAINS = ["github.com", "gitlab.com", "bitbucket.org"];
+
+export function isSafeMarketplaceUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "https:") return false;
+    const extra = process.env.DOTAI_ALLOWED_DOMAINS?.split(",").map(d => d.trim()).filter(Boolean) ?? [];
+    const allowed = [...DEFAULT_SAFE_DOMAINS, ...extra];
+    return allowed.some(domain => parsed.hostname === domain);
+  } catch {
+    return false;
+  }
+}
 
 function isSafeMarketplaceArg(arg: string): boolean {
-  return SAFE_MARKETPLACE_ARG.test(arg) || SAFE_MARKETPLACE_URL.test(arg);
+  return SAFE_MARKETPLACE_ARG.test(arg) || isSafeMarketplaceUrl(arg);
 }
 
 function isSafePluginKey(key: string): boolean {
@@ -125,11 +139,21 @@ export interface RestoreOptions {
   verbose: boolean;
 }
 
+const MAX_PLUGINS = 50;
+const MAX_MARKETPLACES = 20;
+
 export function restoreClaudePlugins(opts: RestoreOptions): PluginRestoreResult {
   const { installedPluginsJson, knownMarketplacesJson, dryRun, verbose } = opts;
 
   const plugins = parseInstalledPlugins(installedPluginsJson);
   const marketplaces = parseKnownMarketplaces(knownMarketplacesJson);
+
+  if (plugins.length > MAX_PLUGINS) {
+    throw new Error(`Too many plugins (${plugins.length}). Maximum is ${MAX_PLUGINS}.`);
+  }
+  if (marketplaces.length > MAX_MARKETPLACES) {
+    throw new Error(`Too many marketplaces (${marketplaces.length}). Maximum is ${MAX_MARKETPLACES}.`);
+  }
 
   const result: PluginRestoreResult = {
     marketplacesAdded: [],
@@ -159,8 +183,8 @@ export function restoreClaudePlugins(opts: RestoreOptions): PluginRestoreResult 
   let registeredMarketplaces: Set<string>;
   try {
     registeredMarketplaces = getRegisteredMarketplaces();
-  } catch (err: any) {
-    if (err.code === "ENOENT") {
+  } catch (err: unknown) {
+    if (err instanceof Error && (err as NodeJS.ErrnoException).code === "ENOENT") {
       result.claudeCliMissing = true;
       return result;
     }
@@ -176,6 +200,7 @@ export function restoreClaudePlugins(opts: RestoreOptions): PluginRestoreResult 
       continue;
     }
     try {
+      console.log(`  Adding marketplace: ${mkt.name}...`);
       execFileSync("claude", ["plugins", "marketplace", "add", mkt.addArg], {
         stdio: "pipe",
         timeout: 30_000,
@@ -190,8 +215,8 @@ export function restoreClaudePlugins(opts: RestoreOptions): PluginRestoreResult 
   let installedPluginKeys: Set<string>;
   try {
     installedPluginKeys = getInstalledPluginKeys();
-  } catch (err: any) {
-    if (err.code === "ENOENT") {
+  } catch (err: unknown) {
+    if (err instanceof Error && (err as NodeJS.ErrnoException).code === "ENOENT") {
       result.claudeCliMissing = true;
       return result;
     }
@@ -208,9 +233,7 @@ export function restoreClaudePlugins(opts: RestoreOptions): PluginRestoreResult 
       continue;
     }
     try {
-      if (verbose) {
-        console.log(`Installing plugin: ${plugin.key}`);
-      }
+      console.log(`  Installing plugin: ${plugin.key}...`);
       execFileSync("claude", ["plugins", "install", plugin.key, "--scope", "user"], {
         stdio: "pipe",
         timeout: 30_000,
@@ -233,17 +256,18 @@ function getRegisteredMarketplaces(): Set<string> {
     timeout: 30_000,
   }).toString();
   const names = new Set<string>();
-  for (const line of output.split("\n")) {
+  const lines = output.split("\n");
+  let headerSkipped = false;
+  for (const line of lines) {
     const trimmed = line.trim();
-    if (
-      trimmed &&
-      !trimmed.startsWith("No ") &&
-      !trimmed.startsWith("-") &&
-      !trimmed.toLowerCase().includes("name")
-    ) {
-      const name = trimmed.split(/\s+/)[0];
-      if (name) names.add(name);
+    if (!trimmed || trimmed.startsWith("No ") || trimmed.startsWith("-")) continue;
+    // Skip the first non-empty, non-decorator line (header row)
+    if (!headerSkipped) {
+      headerSkipped = true;
+      continue;
     }
+    const name = trimmed.split(/\s+/)[0];
+    if (name) names.add(name);
   }
   return names;
 }
@@ -260,7 +284,7 @@ function getInstalledPluginKeys(): Set<string> {
     const trimmed = line.trim();
     if (trimmed && trimmed.includes("@")) {
       const key = trimmed.split(/\s+/)[0];
-      if (key) keys.add(key);
+      if (key && SAFE_PLUGIN_KEY.test(key)) keys.add(key);
     }
   }
   return keys;

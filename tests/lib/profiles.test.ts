@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { loadBuiltinProfiles, getProfile } from "../../src/lib/profiles";
+import { loadBuiltinProfiles, getProfile, getAllProfileNames } from "../../src/lib/profiles";
 
 describe("profiles", () => {
   it("loads built-in claude profile", () => {
@@ -41,5 +41,12 @@ describe("profiles", () => {
     expect(profile!.postImport!.type).toBe("claude-plugins");
     expect(profile!.postImport!.manifestFile).toBe("plugins/installed_plugins.json");
     expect(profile!.postImport!.marketplacesFile).toBe("plugins/known_marketplaces.json");
+  });
+
+  it("getAllProfileNames returns all profile names", () => {
+    const names = getAllProfileNames();
+    expect(Array.isArray(names)).toBe(true);
+    expect(names).toContain("claude");
+    expect(names).toContain("codex");
   });
 });

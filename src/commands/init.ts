@@ -26,7 +26,8 @@ export function runInit(options: InitOptions): InitResult {
       toolsFound: [],
     };
   }
-  // Allow tests to override HOME
+  // SAFETY: HOME mutation is scoped to the synchronous try block below.
+  // If this function is ever made async, replace with explicit homeDir parameter threading.
   const prevHome = process.env.HOME;
   if (homeDir) process.env.HOME = homeDir;
 

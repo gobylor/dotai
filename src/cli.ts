@@ -12,7 +12,14 @@ import { runStatus } from "./commands/status.js";
 import { runUse } from "./commands/use.js";
 import { runDoctor } from "./commands/doctor.js";
 import type { PluginRestoreResult } from "./lib/plugins.js";
-import type { FileState } from "./types.js";
+import type { FileState, Manifest } from "./types.js";
+
+function validateOnly(only: string | undefined, manifest: Manifest): void {
+  if (only && !manifest.tools[only]) {
+    const available = Object.keys(manifest.tools).join(", ");
+    throw new Error(`Unknown tool: "${only}". Available tools: ${available}`);
+  }
+}
 
 function printPluginRestore(pr: PluginRestoreResult, dryRun: boolean): void {
   if (pr.claudeCliMissing) {
@@ -48,8 +55,7 @@ function printPluginRestore(pr: PluginRestoreResult, dryRun: boolean): void {
 function getBackupBase(): string {
   const home = process.env.HOME;
   if (!home) {
-    console.error("HOME environment variable is not set.");
-    process.exit(1);
+    throw new Error("HOME environment variable is not set.");
   }
   return join(home, ".dotai-backup");
 }
@@ -57,8 +63,7 @@ function getBackupBase(): string {
 function getManifest(repoDir: string) {
   const manifestPath = join(repoDir, "dotai.json");
   if (!existsSync(manifestPath)) {
-    console.error(chalk.red("No dotai.json found. Run `dotai init` first."));
-    process.exit(1);
+    throw new Error(`No dotai.json found in ${repoDir}. Run \`dotai init\` first.`);
   }
   return readManifest(manifestPath);
 }
@@ -70,6 +75,7 @@ program.name("dotai").description("AI CLI config manager").version("0.3.1");
 program
   .command("init")
   .description("Auto-discover AI CLIs and generate manifest")
+  .addHelpText("after", "\nExamples:\n  cd my-config-repo && dotai init")
   .action(() => {
     const repoDir = process.cwd();
     const result = runInit({ repoDir });
@@ -83,11 +89,13 @@ program
 program
   .command("export")
   .description("Copy configs from machine to repo")
+  .addHelpText("after", "\nExamples:\n  dotai export\n  dotai export --only claude")
   .option("--only <tool>", "Export only one tool")
   .option("--verbose", "Show each file copied", false)
   .action((opts) => {
     const repoDir = process.cwd();
     const manifest = getManifest(repoDir);
+    validateOnly(opts.only, manifest);
     const result = runExport({ manifest, repoDir, verbose: opts.verbose, only: opts.only });
     console.log(chalk.green(`✅ Exported ${result.toolsExported.join(", ")} (${result.filesCopied} items)`));
   });
@@ -104,6 +112,7 @@ program
   .action((opts) => {
     const repoDir = process.cwd();
     const manifest = getManifest(repoDir);
+    validateOnly(opts.only, manifest);
     const result = runImport({
       manifest, repoDir, verbose: opts.verbose, dryRun: opts.dryRun,
       sync: opts.sync, only: opts.only, backupBase: getBackupBase(), skipPlugins: opts.skipPlugins,
@@ -126,6 +135,7 @@ program
   .action((opts) => {
     const repoDir = process.cwd();
     const manifest = getManifest(repoDir);
+    validateOnly(opts.only, manifest);
     const result = runDiff({ manifest, repoDir, only: opts.only });
     const stateIcon: Record<FileState, string> = {
       "in-sync": chalk.green("="),
@@ -153,6 +163,7 @@ program
   .action((opts) => {
     const repoDir = process.cwd();
     const manifest = getManifest(repoDir);
+    validateOnly(opts.only, manifest);
     const result = runStatus({ manifest, repoDir, only: opts.only });
     for (const tool of result.tools) {
       console.log(chalk.bold(`${tool.name}: `) +
@@ -169,6 +180,7 @@ program
 program
   .command("use <repo>")
   .description("Import config from a GitHub repo (owner/repo)")
+  .addHelpText("after", "\nExamples:\n  dotai use rl.yang/dotai-config\n  dotai use https://github.com/org/repo")
   .option("--dry-run", "Show what would change without writing", false)
   .option("--verbose", "Show details", false)
   .option("--skip-plugins", "Skip plugin restore after import", false)
@@ -207,8 +219,19 @@ program
       result.unmanagedFiles.forEach((f) => console.log(`  ? ${f}`));
     }
     if (result.healthy) {
-      console.log(chalk.green("✅ All checks passed"));
+      if (result.unmanagedFiles.length > 0) {
+        console.log(chalk.green(`✅ All checks passed (${result.unmanagedFiles.length} unmanaged file(s) noted above)`));
+      } else {
+        console.log(chalk.green("✅ All checks passed"));
+      }
     }
   });
 
-program.parse();
+// NOTE: Error messages may include filesystem paths from git stderr.
+// This is acceptable for a CLI tool and helps users debug access issues. (SEC-10)
+try {
+  program.parse();
+} catch (err: unknown) {
+  console.error(chalk.red(err instanceof Error ? err.message : String(err)));
+  process.exit(1);
+}

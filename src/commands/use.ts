@@ -3,7 +3,7 @@ import { existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { randomBytes } from "node:crypto";
-import { readManifest, validateManifest, isKnownConfigDir } from "../lib/manifest.js";
+import { readManifest, isKnownConfigDir, getKnownConfigDirs } from "../lib/manifest.js";
 import { runImport } from "./import.js";
 import type { Manifest } from "../types.js";
 
@@ -23,7 +23,11 @@ export function parseRepoArg(arg: string): RepoRef {
     };
   }
   const parts = arg.split("/");
+  const SAFE_REPO_PART = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
   if (parts.length === 2) {
+    if (!SAFE_REPO_PART.test(parts[0]) || !SAFE_REPO_PART.test(parts[1])) {
+      throw new Error(`Invalid repo format: ${arg}. Owner and repo must contain only alphanumeric characters, dots, hyphens, and underscores.`);
+    }
     return {
       owner: parts[0],
       repo: parts[1],
@@ -34,12 +38,14 @@ export function parseRepoArg(arg: string): RepoRef {
 }
 
 export function validateExternalManifest(manifest: Manifest): string[] {
-  const errors = validateManifest(manifest);
+  // NOTE: Base schema validation is already performed by readManifest -> parseManifest.
+  // This function only checks constraints specific to external (untrusted) manifests.
+  const errors: string[] = [];
   for (const [name, tool] of Object.entries(manifest.tools || {})) {
     if (!isKnownConfigDir(tool.source)) {
       errors.push(
         `Tool '${name}': source '${tool.source}' is not a known AI CLI config directory. ` +
-        `For security, dotai use only allows known paths like ~/.claude, ~/.codex.`
+        `Expected one of: ${getKnownConfigDirs().join(", ")}`
       );
     }
   }
@@ -62,24 +68,24 @@ export function runUse(options: {
   const tempDir = join(tmpdir(), `dotai-use-${randomBytes(6).toString("hex")}`);
 
   try {
-    if (verbose) console.log(`Cloning ${ref.url}...`);
+    console.log(`Cloning ${ref.owner}/${ref.repo}...`);
     try {
       execFileSync("git", ["clone", "--depth", "1", ref.url, tempDir], {
         stdio: verbose ? "inherit" : "pipe",
       });
-    } catch (err: any) {
-      rmSync(tempDir, { recursive: true, force: true });
-      if (err.code === "ENOENT") {
+    } catch (err: unknown) {
+      const e = err as NodeJS.ErrnoException & { stderr?: Buffer; status?: number };
+      if (e.code === "ENOENT") {
         throw new Error("git is not installed. Install git and try again.");
       }
-      const stderr = err.stderr?.toString() || "";
-      if (stderr.includes("not found") || stderr.includes("does not exist") || err.status === 128) {
+      const stderr = e.stderr?.toString() || "";
+      if (stderr.includes("not found") || stderr.includes("does not exist") || e.status === 128) {
         throw new Error(
           `Repository not found: ${ref.owner}/${ref.repo}. ` +
           `Check the URL and ensure you have access.`
         );
       }
-      throw new Error(`Failed to clone ${ref.owner}/${ref.repo}: ${stderr || err.message}`);
+      throw new Error(`Failed to clone ${ref.owner}/${ref.repo}: ${stderr || (err instanceof Error ? err.message : "unknown error")}`);
     }
 
     const manifestPath = join(tempDir, "dotai.json");

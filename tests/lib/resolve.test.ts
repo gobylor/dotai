@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { join } from "node:path";
+import { mkdirSync, symlinkSync, chmodSync } from "node:fs";
 import { createTempDir, cleanupTempDir, writeFixture } from "../helpers";
 import { expandHome, resolveFiles } from "../../src/lib/resolve";
 import type { Manifest } from "../../src/types";
@@ -116,5 +117,57 @@ describe("resolveFiles", () => {
     const result = resolveFiles(manifest, repoDir, "test");
     expect(result.files.length).toBe(1);
     expect(result.files[0].relativePath).toBe("config.toml");
+  });
+
+  it("walkDir skips symlinks that point outside base directory", () => {
+    writeFixture(machineDir, "settings.json", "{}");
+    mkdirSync(join(machineDir, "commands"), { recursive: true });
+    symlinkSync("/tmp", join(machineDir, "commands", "escape"));
+    const manifest = makeManifest("test", machineDir, ["settings.json", "commands/"]);
+    const result = resolveFiles(manifest, repoDir, "test");
+    const paths = result.files.map((f) => f.relativePath);
+    expect(paths).not.toContain("commands/escape");
+    expect(paths).toContain("settings.json");
+  });
+
+  it("walkDir skips unreadable directories without crashing", () => {
+    writeFixture(machineDir, "settings.json", "{}");
+    const unreadable = join(machineDir, "noperm");
+    mkdirSync(unreadable, { recursive: true });
+    writeFixture(machineDir, "noperm/secret.txt", "secret");
+    chmodSync(unreadable, 0o000);
+    try {
+      const manifest = makeManifest("test", machineDir, ["settings.json", "noperm/"]);
+      const result = resolveFiles(manifest, repoDir, "test");
+      expect(result.files.map((f) => f.relativePath)).toContain("settings.json");
+    } finally {
+      chmodSync(unreadable, 0o755);
+    }
+  });
+
+  it("walkDir skips .git directories inside included directories", () => {
+    writeFixture(machineDir, "commands/a.md", "a");
+    writeFixture(machineDir, "commands/.git/HEAD", "ref: refs/heads/main");
+    const manifest = makeManifest("test", machineDir, ["commands/"]);
+    const result = resolveFiles(manifest, repoDir, "test");
+    const paths = result.files.map((f) => f.relativePath);
+    expect(paths).toContain("commands/a.md");
+    expect(paths).not.toContain("commands/.git/HEAD");
+  });
+
+  it("resolveFiles returns empty for unknown tool name", () => {
+    const manifest = makeManifest("test", machineDir, ["settings.json"]);
+    const result = resolveFiles(manifest, repoDir, "nonexistent");
+    expect(result.name).toBe("nonexistent");
+    expect(result.files).toEqual([]);
+  });
+
+  it("directories present in both sides are in-sync", () => {
+    writeFixture(machineDir, "commands/a.md", "same content");
+    writeFixture(repoDir, "test/commands/a.md", "same content");
+    const manifest = makeManifest("test", machineDir, ["commands/"]);
+    const result = resolveFiles(manifest, repoDir, "test");
+    expect(result.files.length).toBe(1);
+    expect(result.files[0].state).toBe("in-sync");
   });
 });

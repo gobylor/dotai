@@ -10,15 +10,29 @@ const PROFILES_DIR = existsSync(join(__dirname, "profiles"))
   ? join(__dirname, "profiles")
   : join(__dirname, "..", "profiles");
 
+let _profileCache: Record<string, ToolProfile> | null = null;
+
 export function loadBuiltinProfiles(): Record<string, ToolProfile> {
+  if (_profileCache) return _profileCache;
   const profiles: Record<string, ToolProfile> = {};
   const entries = readdirSync(PROFILES_DIR).filter((f) => f.endsWith(".json"));
   for (const file of entries) {
     const content = readFileSync(join(PROFILES_DIR, file), "utf-8");
-    const profile: ToolProfile = JSON.parse(content);
+    let profile: ToolProfile;
+    try {
+      profile = JSON.parse(content);
+    } catch {
+      throw new Error(`Failed to parse profile "${file}": file contains invalid JSON`);
+    }
     profiles[profile.name] = profile;
   }
+  _profileCache = profiles;
   return profiles;
+}
+
+// For testing: allow cache reset
+export function _resetProfileCache(): void {
+  _profileCache = null;
 }
 
 export function getProfile(name: string): ToolProfile | null {

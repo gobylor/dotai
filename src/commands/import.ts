@@ -40,12 +40,18 @@ export function runImport(options: ImportOptions): ImportResult {
     const machineBase = expandHome(tool.source);
     const resolved = resolveFiles(manifest, repoDir, toolName);
 
+    // Back up when the machine directory already exists and there are files to modify.
+    // This intentionally triggers even for repo-only files (new additions) because the user
+    // may want to restore the pre-import state if the new files cause issues.
     const hasExisting = existsSync(machineBase) && resolved.files.some(
       (f) => f.state === "modified" || f.state === "repo-only"
     );
 
     if (hasExisting && !dryRun) {
-      const bp = createBackup(machineBase, backupBase, toolName);
+      const filesToBackup = resolved.files
+        .filter((f) => f.state === "modified" || (f.state === "machine-only" && sync))
+        .map((f) => f.relativePath);
+      const bp = createBackup(machineBase, backupBase, toolName, filesToBackup);
       backupPaths.push(bp);
       if (verbose) console.log(`  Backup created for ${toolName}: ${bp}`);
     }
@@ -98,19 +104,32 @@ export function runImport(options: ImportOptions): ImportResult {
 
         let installedPluginsJson = "{}";
         let knownMarketplacesJson = "{}";
-        try { installedPluginsJson = readFileSync(manifestFile, "utf-8"); } catch {}
-        try { knownMarketplacesJson = readFileSync(marketplacesFile, "utf-8"); } catch {}
+        try {
+          installedPluginsJson = readFileSync(manifestFile, "utf-8");
+        } catch (err: unknown) {
+          if (err instanceof Error && (err as NodeJS.ErrnoException).code !== "ENOENT") {
+            console.warn(`Warning: Could not read ${manifestFile}: ${(err as Error).message}`);
+          }
+        }
+        try {
+          knownMarketplacesJson = readFileSync(marketplacesFile, "utf-8");
+        } catch (err: unknown) {
+          if (err instanceof Error && (err as NodeJS.ErrnoException).code !== "ENOENT") {
+            console.warn(`Warning: Could not read ${marketplacesFile}: ${(err as Error).message}`);
+          }
+        }
 
         try {
+          // NOTE: Currently only the "claude" profile has postImport. If multiple tools gain
+          // postImport hooks, this should accumulate results rather than overwriting.
           pluginRestore = restoreClaudePlugins({
             installedPluginsJson,
             knownMarketplacesJson,
             dryRun,
             verbose,
           });
-        } catch {
-          // Non-fatal: malformed JSON or unexpected error in plugin restore
-          // should not abort the import
+        } catch (err: unknown) {
+          console.warn(`Warning: Plugin restore failed: ${err instanceof Error ? err.message : "unknown error"}`);
         }
       }
     }

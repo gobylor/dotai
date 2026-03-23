@@ -1,10 +1,11 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   parseInstalledPlugins,
   parseKnownMarketplaces,
   getPluginsToRestore,
   getMarketplacesToRestore,
   restoreClaudePlugins,
+  isSafeMarketplaceUrl,
 } from "../../src/lib/plugins";
 import * as child_process from "node:child_process";
 
@@ -320,5 +321,266 @@ describe("restoreClaudePlugins", () => {
 
     expect(result.pluginsFailed).toEqual(["plugin-a@mkt"]);
     expect(result.pluginsInstalled).toEqual(["plugin-b@mkt"]);
+  });
+
+  it("rejects unsafe plugin keys in pluginsFailed", () => {
+    const unsafeJson = JSON.stringify({
+      version: 2,
+      plugins: {
+        "plugin@mkt; rm -rf /": [
+          { scope: "user", installPath: "/x", version: "1.0", installedAt: "2026-01-01T00:00:00Z", lastUpdated: "2026-01-01T00:00:00Z", gitCommitSha: "aaa" },
+        ],
+      },
+    });
+
+    mockExecFileSync
+      .mockReturnValueOnce(Buffer.from("")) // marketplace list
+      .mockReturnValueOnce(Buffer.from("")); // plugin list
+
+    const result = restoreClaudePlugins({
+      installedPluginsJson: unsafeJson,
+      knownMarketplacesJson: JSON.stringify({}),
+      dryRun: false,
+      verbose: false,
+    });
+
+    expect(result.pluginsFailed).toEqual(["plugin@mkt; rm -rf /"]);
+    expect(result.pluginsInstalled).toHaveLength(0);
+  });
+
+  it("throws when too many plugins (SEC-09)", () => {
+    const plugins: Record<string, unknown[]> = {};
+    for (let i = 0; i < 51; i++) {
+      plugins[`plugin-${i}@mkt`] = [
+        { scope: "user", installPath: `/x${i}`, version: "1.0", installedAt: "2026-01-01T00:00:00Z", lastUpdated: "2026-01-01T00:00:00Z", gitCommitSha: "aaa" },
+      ];
+    }
+    const json = JSON.stringify({ version: 2, plugins });
+
+    expect(() => restoreClaudePlugins({
+      installedPluginsJson: json,
+      knownMarketplacesJson: JSON.stringify({}),
+      dryRun: true,
+      verbose: false,
+    })).toThrow("Too many plugins (51). Maximum is 50.");
+  });
+
+  it("throws when too many marketplaces (SEC-09)", () => {
+    const mkts: Record<string, unknown> = {};
+    for (let i = 0; i < 21; i++) {
+      mkts[`mkt-${i}`] = {
+        source: { source: "github", repo: `org/repo-${i}` },
+        installLocation: `/x${i}`,
+        lastUpdated: "2026-01-01T00:00:00Z",
+      };
+    }
+
+    expect(() => restoreClaudePlugins({
+      installedPluginsJson: JSON.stringify({ version: 2, plugins: {} }),
+      knownMarketplacesJson: JSON.stringify(mkts),
+      dryRun: true,
+      verbose: false,
+    })).toThrow("Too many marketplaces (21). Maximum is 20.");
+  });
+});
+
+describe("marketplace URL validation (SEC-02, TEST-02)", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("rejects http:// URLs (requires https)", () => {
+    expect(isSafeMarketplaceUrl("http://github.com/org/repo")).toBe(false);
+  });
+
+  it("rejects internal IP URLs like http://169.254.169.254/", () => {
+    expect(isSafeMarketplaceUrl("http://169.254.169.254/")).toBe(false);
+    expect(isSafeMarketplaceUrl("https://169.254.169.254/")).toBe(false);
+  });
+
+  it("rejects localhost URLs", () => {
+    expect(isSafeMarketplaceUrl("https://localhost/repo")).toBe(false);
+    expect(isSafeMarketplaceUrl("http://localhost/repo")).toBe(false);
+  });
+
+  it("accepts https://github.com/org/repo", () => {
+    expect(isSafeMarketplaceUrl("https://github.com/org/repo")).toBe(true);
+  });
+
+  it("accepts https://gitlab.com/org/repo", () => {
+    expect(isSafeMarketplaceUrl("https://gitlab.com/org/repo")).toBe(true);
+  });
+
+  it("accepts https://bitbucket.org/org/repo", () => {
+    expect(isSafeMarketplaceUrl("https://bitbucket.org/org/repo")).toBe(true);
+  });
+
+  it("accepts custom domain when DOTAI_ALLOWED_DOMAINS is set", () => {
+    vi.stubEnv("DOTAI_ALLOWED_DOMAINS", "git.corp.example.com");
+    expect(isSafeMarketplaceUrl("https://git.corp.example.com/org/repo")).toBe(true);
+  });
+
+  it("rejects custom domain over HTTP even when in DOTAI_ALLOWED_DOMAINS", () => {
+    vi.stubEnv("DOTAI_ALLOWED_DOMAINS", "git.corp.example.com");
+    expect(isSafeMarketplaceUrl("http://git.corp.example.com/org/repo")).toBe(false);
+  });
+
+  it("rejects non-URL strings", () => {
+    expect(isSafeMarketplaceUrl("not-a-url")).toBe(false);
+  });
+});
+
+describe("SAFE_PLUGIN_KEY rejection (TEST-02)", () => {
+  beforeEach(() => {
+    mockExecFileSync.mockReset();
+  });
+
+  function restoreWithPlugin(key: string) {
+    const json = JSON.stringify({
+      version: 2,
+      plugins: {
+        [key]: [
+          { scope: "user", installPath: "/x", version: "1.0", installedAt: "2026-01-01T00:00:00Z", lastUpdated: "2026-01-01T00:00:00Z", gitCommitSha: "aaa" },
+        ],
+      },
+    });
+    mockExecFileSync
+      .mockReturnValueOnce(Buffer.from("")) // marketplace list
+      .mockReturnValueOnce(Buffer.from("")); // plugin list
+    return restoreClaudePlugins({
+      installedPluginsJson: json,
+      knownMarketplacesJson: JSON.stringify({}),
+      dryRun: false,
+      verbose: false,
+    });
+  }
+
+  it("rejects key with shell metacharacters: 'plugin@mkt; rm -rf /'", () => {
+    const result = restoreWithPlugin("plugin@mkt; rm -rf /");
+    expect(result.pluginsFailed).toContain("plugin@mkt; rm -rf /");
+  });
+
+  it("rejects key starting with dash: '-evil-flag@mkt'", () => {
+    const result = restoreWithPlugin("-evil-flag@mkt");
+    expect(result.pluginsFailed).toContain("-evil-flag@mkt");
+  });
+
+  it("rejects key with spaces: 'plugin @mkt'", () => {
+    const result = restoreWithPlugin("plugin @mkt");
+    expect(result.pluginsFailed).toContain("plugin @mkt");
+  });
+
+  it("rejects key with backticks: 'plugin`cmd`@mkt'", () => {
+    const result = restoreWithPlugin("plugin`cmd`@mkt");
+    expect(result.pluginsFailed).toContain("plugin`cmd`@mkt");
+  });
+
+  it("rejects key without @: 'pluginonly'", () => {
+    const result = restoreWithPlugin("pluginonly");
+    expect(result.pluginsFailed).toContain("pluginonly");
+  });
+
+  it("accepts valid key: 'superpowers@claude-plugins-official'", () => {
+    mockExecFileSync
+      .mockReturnValueOnce(Buffer.from("")) // marketplace list
+      .mockReturnValueOnce(Buffer.from("")) // plugin list
+      .mockReturnValueOnce(undefined); // plugin install
+    const json = JSON.stringify({
+      version: 2,
+      plugins: {
+        "superpowers@claude-plugins-official": [
+          { scope: "user", installPath: "/x", version: "1.0", installedAt: "2026-01-01T00:00:00Z", lastUpdated: "2026-01-01T00:00:00Z", gitCommitSha: "aaa" },
+        ],
+      },
+    });
+    const result = restoreClaudePlugins({
+      installedPluginsJson: json,
+      knownMarketplacesJson: JSON.stringify({}),
+      dryRun: false,
+      verbose: false,
+    });
+    expect(result.pluginsInstalled).toContain("superpowers@claude-plugins-official");
+  });
+});
+
+describe("SAFE_MARKETPLACE_ARG rejection (TEST-02)", () => {
+  beforeEach(() => {
+    mockExecFileSync.mockReset();
+  });
+
+  function restoreWithMarketplace(addArg: string) {
+    const mkts = JSON.stringify({
+      "test-mkt": {
+        source: { source: "git", url: addArg },
+        installLocation: "/x",
+        lastUpdated: "2026-01-01T00:00:00Z",
+      },
+    });
+    mockExecFileSync
+      .mockReturnValueOnce(Buffer.from("")) // marketplace list
+      .mockReturnValueOnce(Buffer.from("")); // plugin list
+    return restoreClaudePlugins({
+      installedPluginsJson: JSON.stringify({ version: 2, plugins: {} }),
+      knownMarketplacesJson: mkts,
+      dryRun: false,
+      verbose: false,
+    });
+  }
+
+  it("rejects arg with semicolon: 'org/repo; echo pwned'", () => {
+    const result = restoreWithMarketplace("org/repo; echo pwned");
+    expect(result.marketplacesFailed).toContain("test-mkt");
+  });
+
+  it("rejects arg starting with dash: '--malicious'", () => {
+    const result = restoreWithMarketplace("--malicious");
+    expect(result.marketplacesFailed).toContain("test-mkt");
+  });
+
+  it("rejects arg with backticks", () => {
+    const result = restoreWithMarketplace("org/repo`cmd`");
+    expect(result.marketplacesFailed).toContain("test-mkt");
+  });
+
+  it("accepts valid github repo: 'anthropics/claude-plugins-official'", () => {
+    mockExecFileSync
+      .mockReturnValueOnce(Buffer.from("")) // marketplace list
+      .mockReturnValueOnce(undefined) // marketplace add
+      .mockReturnValueOnce(Buffer.from("")); // plugin list
+    const mkts = JSON.stringify({
+      "test-mkt": {
+        source: { source: "github", repo: "anthropics/claude-plugins-official" },
+        installLocation: "/x",
+        lastUpdated: "2026-01-01T00:00:00Z",
+      },
+    });
+    const result = restoreClaudePlugins({
+      installedPluginsJson: JSON.stringify({ version: 2, plugins: {} }),
+      knownMarketplacesJson: mkts,
+      dryRun: false,
+      verbose: false,
+    });
+    expect(result.marketplacesAdded).toContain("test-mkt");
+  });
+
+  it("accepts valid HTTPS URL: 'https://github.com/org/repo.git'", () => {
+    mockExecFileSync
+      .mockReturnValueOnce(Buffer.from("")) // marketplace list
+      .mockReturnValueOnce(undefined) // marketplace add
+      .mockReturnValueOnce(Buffer.from("")); // plugin list
+    const mkts = JSON.stringify({
+      "test-mkt": {
+        source: { source: "git", url: "https://github.com/org/repo.git" },
+        installLocation: "/x",
+        lastUpdated: "2026-01-01T00:00:00Z",
+      },
+    });
+    const result = restoreClaudePlugins({
+      installedPluginsJson: JSON.stringify({ version: 2, plugins: {} }),
+      knownMarketplacesJson: mkts,
+      dryRun: false,
+      verbose: false,
+    });
+    expect(result.marketplacesAdded).toContain("test-mkt");
   });
 });

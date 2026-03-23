@@ -1,6 +1,6 @@
 {
   "name": "@openlor/dotai",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "AI CLI config manager — sync Claude Code, Codex, and more between machines",
   "type": "module",
   "bin": {

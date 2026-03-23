@@ -46,12 +46,17 @@ export function validateExternalManifest(manifest: Manifest): string[] {
   return errors;
 }
 
+interface UseResult {
+  pluginRestore?: import("../lib/plugins.js").PluginRestoreResult;
+}
+
 export function runUse(options: {
   repoArg: string;
   dryRun: boolean;
   verbose: boolean;
   backupBase: string;
-}): void {
+  skipPlugins?: boolean;
+}): UseResult {
   const { repoArg, dryRun, verbose, backupBase } = options;
   const ref = parseRepoArg(repoArg);
   const tempDir = join(tmpdir(), `dotai-use-${randomBytes(6).toString("hex")}`);
@@ -88,7 +93,8 @@ export function runUse(options: {
       throw new Error(`Invalid manifest:\n${errors.map((e) => `  - ${e}`).join("\n")}`);
     }
 
-    runImport({ manifest, repoDir: tempDir, verbose, dryRun, sync: false, backupBase });
+    const importResult = runImport({ manifest, repoDir: tempDir, verbose, dryRun, sync: false, backupBase, skipPlugins: options.skipPlugins });
+    return { pluginRestore: importResult.pluginRestore };
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }

@@ -11,7 +11,39 @@ import { runDiff } from "./commands/diff.js";
 import { runStatus } from "./commands/status.js";
 import { runUse } from "./commands/use.js";
 import { runDoctor } from "./commands/doctor.js";
+import type { PluginRestoreResult } from "./lib/plugins.js";
 import type { FileState } from "./types.js";
+
+function printPluginRestore(pr: PluginRestoreResult, dryRun: boolean): void {
+  if (pr.claudeCliMissing) {
+    console.log(chalk.yellow("\n⚠ claude CLI not found — skipping plugin restore. Install plugins manually."));
+    return;
+  }
+  const hasOutput = pr.marketplacesAdded.length > 0 || pr.pluginsInstalled.length > 0 ||
+    pr.pluginsWarned.length > 0 || pr.pluginsSkipped.length > 0 ||
+    pr.pluginsFailed.length > 0 || pr.marketplacesFailed.length > 0;
+  if (!hasOutput) return;
+
+  console.log(chalk.bold(`\n🔌 Plugin restore${dryRun ? " (dry-run preview)" : ""}:`));
+  if (pr.marketplacesAdded.length > 0) {
+    console.log(`  ${dryRun ? "Would add" : "Added"} ${pr.marketplacesAdded.length} marketplace(s): ${pr.marketplacesAdded.join(", ")}`);
+  }
+  if (pr.marketplacesFailed.length > 0) {
+    console.log(chalk.red(`  Failed to add ${pr.marketplacesFailed.length} marketplace(s): ${pr.marketplacesFailed.join(", ")}`));
+  }
+  if (pr.pluginsInstalled.length > 0) {
+    console.log(chalk.green(`  ${dryRun ? "Would install" : "Installed"} ${pr.pluginsInstalled.length} plugin(s): ${pr.pluginsInstalled.join(", ")}`));
+  }
+  for (const w of pr.pluginsWarned) {
+    console.log(chalk.yellow(`  ⚠ Skipped local/project plugin: ${w}`));
+  }
+  if (pr.pluginsSkipped.length > 0) {
+    console.log(`  Skipped ${pr.pluginsSkipped.length} already installed: ${pr.pluginsSkipped.join(", ")}`);
+  }
+  if (pr.pluginsFailed.length > 0) {
+    console.log(chalk.red(`  Failed ${pr.pluginsFailed.length}: ${pr.pluginsFailed.join(", ")}`));
+  }
+}
 
 function getBackupBase(): string {
   const home = process.env.HOME;
@@ -32,7 +64,7 @@ function getManifest(repoDir: string) {
 }
 
 const program = new Command();
-program.name("dotai").description("AI CLI config manager").version("0.2.0");
+program.name("dotai").description("AI CLI config manager").version("0.3.0");
 
 // --- init ---
 program
@@ -68,12 +100,13 @@ program
   .option("--dry-run", "Show what would change without writing", false)
   .option("--sync", "Delete machine files not in repo (with backup)", false)
   .option("--verbose", "Show each file copied", false)
+  .option("--skip-plugins", "Skip plugin restore after import", false)
   .action((opts) => {
     const repoDir = process.cwd();
     const manifest = getManifest(repoDir);
     const result = runImport({
       manifest, repoDir, verbose: opts.verbose, dryRun: opts.dryRun,
-      sync: opts.sync, only: opts.only, backupBase: getBackupBase(),
+      sync: opts.sync, only: opts.only, backupBase: getBackupBase(), skipPlugins: opts.skipPlugins,
     });
     if (opts.dryRun) {
       console.log(chalk.yellow("Dry run — no changes made."));
@@ -82,6 +115,7 @@ program
       for (const bp of result.backupPaths) console.log(`  Backup: ${bp}`);
       if (result.filesDeleted > 0) console.log(`  Deleted ${result.filesDeleted} machine-only files (--sync)`);
     }
+    if (result.pluginRestore) printPluginRestore(result.pluginRestore, opts.dryRun);
   });
 
 // --- diff ---
@@ -137,9 +171,11 @@ program
   .description("Import config from a GitHub repo (owner/repo)")
   .option("--dry-run", "Show what would change without writing", false)
   .option("--verbose", "Show details", false)
+  .option("--skip-plugins", "Skip plugin restore after import", false)
   .action((repo, opts) => {
-    runUse({ repoArg: repo, dryRun: opts.dryRun, verbose: opts.verbose, backupBase: getBackupBase() });
+    const result = runUse({ repoArg: repo, dryRun: opts.dryRun, verbose: opts.verbose, backupBase: getBackupBase(), skipPlugins: opts.skipPlugins });
     if (!opts.dryRun) console.log(chalk.green("✅ Config imported successfully"));
+    if (result.pluginRestore) printPluginRestore(result.pluginRestore, opts.dryRun);
   });
 
 // --- doctor ---

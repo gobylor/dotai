@@ -34,4 +34,12 @@ describe("profiles", () => {
       expect(Array.isArray(profile.portable)).toBe(true);
     }
   });
+  it("claude profile has postImport hook", () => {
+    const profile = getProfile("claude");
+    expect(profile).not.toBeNull();
+    expect(profile!.postImport).toBeDefined();
+    expect(profile!.postImport!.type).toBe("claude-plugins");
+    expect(profile!.postImport!.manifestFile).toBe("plugins/installed_plugins.json");
+    expect(profile!.postImport!.marketplacesFile).toBe("plugins/known_marketplaces.json");
+  });
 });

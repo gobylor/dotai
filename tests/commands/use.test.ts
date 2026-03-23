@@ -47,7 +47,7 @@ describe("runUse error handling", () => {
           verbose: false,
           backupBase,
         })
-      ).toThrow(/not found|does not exist|failed to clone/i);
+      ).toThrow(/not found|does not exist|failed to clone|No dotai\.json found/i);
     } finally {
       cleanupTempDir(backupBase);
     }

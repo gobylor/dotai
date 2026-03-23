@@ -6,3 +6,5 @@ dist/
 # Design & planning docs (not shipped with tool)
 TODOS.md
 docs/
+
+.superset/

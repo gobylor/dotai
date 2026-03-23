@@ -64,7 +64,7 @@ function getManifest(repoDir: string) {
 }
 
 const program = new Command();
-program.name("dotai").description("AI CLI config manager").version("0.2.0");
+program.name("dotai").description("AI CLI config manager").version("0.3.0");
 
 // --- init ---
 program

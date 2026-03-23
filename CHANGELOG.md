@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.1] - 2026-03-23
+
+### Fixed
+- Fix profiles directory not found when installed via npm (bundled path resolution)
+
 ## [0.3.0] - 2026-03-23
 
 ### Added

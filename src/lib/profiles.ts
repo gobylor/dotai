@@ -1,10 +1,14 @@
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ToolProfile } from "../types.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const PROFILES_DIR = join(__dirname, "..", "profiles");
+// After bundling, __dirname is dist/ and profiles are at dist/profiles/.
+// In development, __dirname is src/lib/ and profiles are at src/profiles/.
+const PROFILES_DIR = existsSync(join(__dirname, "profiles"))
+  ? join(__dirname, "profiles")
+  : join(__dirname, "..", "profiles");
 
 export function loadBuiltinProfiles(): Record<string, ToolProfile> {
   const profiles: Record<string, ToolProfile> = {};

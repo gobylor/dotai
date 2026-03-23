@@ -1,10 +1,18 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   parseInstalledPlugins,
   parseKnownMarketplaces,
   getPluginsToRestore,
   getMarketplacesToRestore,
+  restoreClaudePlugins,
 } from "../../src/lib/plugins";
+import * as child_process from "node:child_process";
+
+vi.mock("node:child_process", () => ({
+  execFileSync: vi.fn(),
+}));
+
+const mockExecFileSync = child_process.execFileSync as ReturnType<typeof vi.fn>;
 
 const SAMPLE_INSTALLED = {
   version: 2,
@@ -150,5 +158,150 @@ describe("getMarketplacesToRestore", () => {
     const result = getMarketplacesToRestore(marketplaces, alreadyRegistered);
     expect(result.toAdd.map((m) => m.name)).toEqual(["obsidian-skills", "omc"]);
     expect(result.skipped.map((m) => m.name)).toEqual(["claude-plugins-official"]);
+  });
+});
+
+// Minimal JSON fixtures for restoreClaudePlugins tests
+const RESTORE_INSTALLED_JSON = JSON.stringify({
+  version: 2,
+  plugins: {
+    "superpowers@claude-plugins-official": [
+      { scope: "user", installPath: "/x", version: "1.0", installedAt: "2026-01-01T00:00:00Z", lastUpdated: "2026-01-01T00:00:00Z", gitCommitSha: "aaa" },
+    ],
+    "obsidian@obsidian-skills": [
+      { scope: "local", projectPath: "/some/project", installPath: "/y", version: "1.0", installedAt: "2026-01-01T00:00:00Z", lastUpdated: "2026-01-01T00:00:00Z", gitCommitSha: "bbb" },
+    ],
+  },
+});
+
+const RESTORE_MARKETPLACES_JSON = JSON.stringify({
+  "claude-plugins-official": {
+    source: { source: "github", repo: "anthropics/claude-plugins-official" },
+    installLocation: "/x",
+    lastUpdated: "2026-01-01T00:00:00Z",
+  },
+});
+
+describe("restoreClaudePlugins", () => {
+  beforeEach(() => {
+    mockExecFileSync.mockReset();
+  });
+
+  it("adds marketplaces then installs plugins", () => {
+    // marketplace list returns empty, plugin list returns empty
+    mockExecFileSync
+      .mockReturnValueOnce(Buffer.from("")) // marketplace list
+      .mockReturnValueOnce(undefined)        // marketplace add
+      .mockReturnValueOnce(Buffer.from("")) // plugin list
+      .mockReturnValueOnce(undefined);       // plugin install
+
+    const result = restoreClaudePlugins({
+      installedPluginsJson: RESTORE_INSTALLED_JSON,
+      knownMarketplacesJson: RESTORE_MARKETPLACES_JSON,
+      dryRun: false,
+      verbose: false,
+    });
+
+    // marketplace add should have been called
+    expect(mockExecFileSync).toHaveBeenCalledWith(
+      "claude",
+      ["plugins", "marketplace", "add", "anthropics/claude-plugins-official"],
+      expect.objectContaining({ stdio: "pipe" })
+    );
+
+    // plugin install should have been called for user-scoped plugin
+    expect(mockExecFileSync).toHaveBeenCalledWith(
+      "claude",
+      ["plugins", "install", "superpowers@claude-plugins-official", "--scope", "user"],
+      expect.objectContaining({ stdio: "pipe" })
+    );
+
+    expect(result.marketplacesAdded).toEqual(["claude-plugins-official"]);
+    expect(result.pluginsInstalled).toEqual(["superpowers@claude-plugins-official"]);
+    expect(result.pluginsWarned).toEqual(["obsidian@obsidian-skills"]);
+  });
+
+  it("skips local-scoped plugins with warning", () => {
+    const localOnlyJson = JSON.stringify({
+      version: 2,
+      plugins: {
+        "local-plugin@mkt": [
+          { scope: "local", projectPath: "/proj", installPath: "/z", version: "1.0", installedAt: "2026-01-01T00:00:00Z", lastUpdated: "2026-01-01T00:00:00Z", gitCommitSha: "ccc" },
+        ],
+      },
+    });
+
+    mockExecFileSync
+      .mockReturnValueOnce(Buffer.from("")) // marketplace list (no marketplaces in manifest so no add calls)
+      .mockReturnValueOnce(Buffer.from("")); // plugin list
+
+    const result = restoreClaudePlugins({
+      installedPluginsJson: localOnlyJson,
+      knownMarketplacesJson: JSON.stringify({}),
+      dryRun: false,
+      verbose: false,
+    });
+
+    expect(result.pluginsWarned).toEqual(["local-plugin@mkt"]);
+    expect(result.pluginsInstalled).toHaveLength(0);
+  });
+
+  it("dry-run reports without executing any CLI commands", () => {
+    const result = restoreClaudePlugins({
+      installedPluginsJson: RESTORE_INSTALLED_JSON,
+      knownMarketplacesJson: RESTORE_MARKETPLACES_JSON,
+      dryRun: true,
+      verbose: false,
+    });
+
+    expect(mockExecFileSync).not.toHaveBeenCalled();
+    expect(result.marketplacesAdded).toEqual(["claude-plugins-official"]);
+    expect(result.pluginsInstalled).toEqual(["superpowers@claude-plugins-official"]);
+    expect(result.pluginsWarned).toEqual(["obsidian@obsidian-skills"]);
+  });
+
+  it("handles missing claude CLI gracefully", () => {
+    const enoentError = Object.assign(new Error("spawn claude ENOENT"), { code: "ENOENT" });
+    mockExecFileSync.mockImplementationOnce(() => { throw enoentError; });
+
+    const result = restoreClaudePlugins({
+      installedPluginsJson: RESTORE_INSTALLED_JSON,
+      knownMarketplacesJson: RESTORE_MARKETPLACES_JSON,
+      dryRun: false,
+      verbose: false,
+    });
+
+    expect(result.claudeCliMissing).toBe(true);
+    expect(result.pluginsInstalled).toHaveLength(0);
+  });
+
+  it("continues when individual plugin install fails", () => {
+    const twoPluginsJson = JSON.stringify({
+      version: 2,
+      plugins: {
+        "plugin-a@mkt": [
+          { scope: "user", installPath: "/a", version: "1.0", installedAt: "2026-01-01T00:00:00Z", lastUpdated: "2026-01-01T00:00:00Z", gitCommitSha: "ddd" },
+        ],
+        "plugin-b@mkt": [
+          { scope: "user", installPath: "/b", version: "1.0", installedAt: "2026-01-01T00:00:00Z", lastUpdated: "2026-01-01T00:00:00Z", gitCommitSha: "eee" },
+        ],
+      },
+    });
+
+    mockExecFileSync
+      .mockReturnValueOnce(Buffer.from("")) // marketplace list
+      .mockReturnValueOnce(Buffer.from("")) // plugin list
+      .mockImplementationOnce(() => { throw new Error("install failed"); }) // plugin-a install fails
+      .mockReturnValueOnce(undefined); // plugin-b install succeeds
+
+    const result = restoreClaudePlugins({
+      installedPluginsJson: twoPluginsJson,
+      knownMarketplacesJson: JSON.stringify({}),
+      dryRun: false,
+      verbose: false,
+    });
+
+    expect(result.pluginsFailed).toEqual(["plugin-a@mkt"]);
+    expect(result.pluginsInstalled).toEqual(["plugin-b@mkt"]);
   });
 });

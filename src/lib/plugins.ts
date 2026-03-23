@@ -1,3 +1,5 @@
+import { execFileSync } from "node:child_process";
+
 // --- Data types ---
 
 export interface ParsedPlugin {
@@ -83,4 +85,150 @@ export function getMarketplacesToRestore(marketplaces: ParsedMarketplace[], alre
     }
   }
   return { toAdd, skipped };
+}
+
+// --- Restore execution ---
+
+export interface PluginRestoreResult {
+  marketplacesAdded: string[];
+  marketplacesSkipped: string[];
+  marketplacesFailed: string[];
+  pluginsInstalled: string[];
+  pluginsSkipped: string[];
+  pluginsWarned: string[];
+  pluginsFailed: string[];
+  claudeCliMissing?: boolean;
+}
+
+interface RestoreOptions {
+  installedPluginsJson: string;
+  knownMarketplacesJson: string;
+  dryRun: boolean;
+  verbose: boolean;
+}
+
+export function restoreClaudePlugins(opts: RestoreOptions): PluginRestoreResult {
+  const { installedPluginsJson, knownMarketplacesJson, dryRun, verbose } = opts;
+
+  const plugins = parseInstalledPlugins(installedPluginsJson);
+  const marketplaces = parseKnownMarketplaces(knownMarketplacesJson);
+
+  const result: PluginRestoreResult = {
+    marketplacesAdded: [],
+    marketplacesSkipped: [],
+    marketplacesFailed: [],
+    pluginsInstalled: [],
+    pluginsSkipped: [],
+    pluginsWarned: [],
+    pluginsFailed: [],
+  };
+
+  // Dry-run: compute what would happen without executing any CLI commands
+  if (dryRun) {
+    const mktFilter = getMarketplacesToRestore(marketplaces, new Set());
+    const pluginFilter = getPluginsToRestore(plugins, new Set());
+    result.marketplacesAdded = mktFilter.toAdd.map((m) => m.name);
+    result.marketplacesSkipped = mktFilter.skipped.map((m) => m.name);
+    result.pluginsInstalled = pluginFilter.toInstall.map((p) => p.key);
+    result.pluginsSkipped = pluginFilter.skipped.map((p) => p.key);
+    result.pluginsWarned = pluginFilter.warned.map((p) => p.key);
+    return result;
+  }
+
+  // Phase 1: marketplaces
+  let registeredMarketplaces: Set<string>;
+  try {
+    registeredMarketplaces = getRegisteredMarketplaces();
+  } catch (err: any) {
+    if (err.code === "ENOENT") {
+      result.claudeCliMissing = true;
+      return result;
+    }
+    throw err;
+  }
+
+  const mktFilter = getMarketplacesToRestore(marketplaces, registeredMarketplaces);
+  result.marketplacesSkipped = mktFilter.skipped.map((m) => m.name);
+
+  for (const mkt of mktFilter.toAdd) {
+    try {
+      execFileSync("claude", ["plugins", "marketplace", "add", mkt.addArg], {
+        stdio: "pipe",
+        timeout: 30_000,
+      });
+      result.marketplacesAdded.push(mkt.name);
+    } catch {
+      result.marketplacesFailed.push(mkt.name);
+    }
+  }
+
+  // Phase 2: plugins
+  let installedPluginKeys: Set<string>;
+  try {
+    installedPluginKeys = getInstalledPluginKeys();
+  } catch (err: any) {
+    if (err.code === "ENOENT") {
+      result.claudeCliMissing = true;
+      return result;
+    }
+    throw err;
+  }
+
+  const pluginFilter = getPluginsToRestore(plugins, installedPluginKeys);
+  result.pluginsSkipped = pluginFilter.skipped.map((p) => p.key);
+  result.pluginsWarned = pluginFilter.warned.map((p) => p.key);
+
+  for (const plugin of pluginFilter.toInstall) {
+    try {
+      if (verbose) {
+        console.log(`Installing plugin: ${plugin.key}`);
+      }
+      execFileSync("claude", ["plugins", "install", plugin.key, "--scope", "user"], {
+        stdio: "pipe",
+        timeout: 30_000,
+      });
+      result.pluginsInstalled.push(plugin.key);
+    } catch {
+      result.pluginsFailed.push(plugin.key);
+    }
+  }
+
+  return result;
+}
+
+function getRegisteredMarketplaces(): Set<string> {
+  const output = execFileSync("claude", ["plugins", "marketplace", "list"], {
+    stdio: "pipe",
+    timeout: 30_000,
+  }).toString();
+  const names = new Set<string>();
+  for (const line of output.split("\n")) {
+    const trimmed = line.trim();
+    if (
+      trimmed &&
+      !trimmed.startsWith("No ") &&
+      !trimmed.startsWith("-") &&
+      !trimmed.toLowerCase().includes("name")
+    ) {
+      const name = trimmed.split(/\s+/)[0];
+      if (name) names.add(name);
+    }
+  }
+  return names;
+}
+
+function getInstalledPluginKeys(): Set<string> {
+  const output = execFileSync("claude", ["plugins", "list"], {
+    stdio: "pipe",
+    timeout: 30_000,
+  }).toString();
+  const keys = new Set<string>();
+  for (const line of output.split("\n")) {
+    const trimmed = line.trim();
+    if (trimmed && trimmed.includes("@")) {
+      const key = trimmed.split(/\s+/)[0];
+      if (key) keys.add(key);
+    }
+  }
+  return keys;
 }

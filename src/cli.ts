@@ -68,12 +68,13 @@ program
   .option("--dry-run", "Show what would change without writing", false)
   .option("--sync", "Delete machine files not in repo (with backup)", false)
   .option("--verbose", "Show each file copied", false)
+  .option("--skip-plugins", "Skip plugin restore after import", false)
   .action((opts) => {
     const repoDir = process.cwd();
     const manifest = getManifest(repoDir);
     const result = runImport({
       manifest, repoDir, verbose: opts.verbose, dryRun: opts.dryRun,
-      sync: opts.sync, only: opts.only, backupBase: getBackupBase(),
+      sync: opts.sync, only: opts.only, backupBase: getBackupBase(), skipPlugins: opts.skipPlugins,
     });
     if (opts.dryRun) {
       console.log(chalk.yellow("Dry run — no changes made."));
@@ -81,6 +82,33 @@ program
       console.log(chalk.green(`✅ Imported ${result.toolsImported.join(", ")} (${result.filesImported} files)`));
       for (const bp of result.backupPaths) console.log(`  Backup: ${bp}`);
       if (result.filesDeleted > 0) console.log(`  Deleted ${result.filesDeleted} machine-only files (--sync)`);
+      if (result.pluginRestore) {
+        const pr = result.pluginRestore;
+        if (pr.claudeCliMissing) {
+          console.log(chalk.yellow("\n⚠ claude CLI not found — skipping plugin restore. Install plugins manually."));
+        } else {
+          const hasOutput = pr.marketplacesAdded.length > 0 || pr.pluginsInstalled.length > 0 ||
+            pr.pluginsWarned.length > 0 || pr.pluginsSkipped.length > 0 || pr.pluginsFailed.length > 0;
+          if (hasOutput) {
+            console.log(chalk.bold("\n🔌 Plugin restore:"));
+            if (pr.marketplacesAdded.length > 0) {
+              console.log(`  Added ${pr.marketplacesAdded.length} marketplace(s): ${pr.marketplacesAdded.join(", ")}`);
+            }
+            if (pr.pluginsInstalled.length > 0) {
+              console.log(chalk.green(`  Installed ${pr.pluginsInstalled.length} plugin(s): ${pr.pluginsInstalled.join(", ")}`));
+            }
+            for (const w of pr.pluginsWarned) {
+              console.log(chalk.yellow(`  ⚠ Skipped local/project plugin: ${w}`));
+            }
+            if (pr.pluginsSkipped.length > 0) {
+              console.log(`  Skipped ${pr.pluginsSkipped.length} already installed: ${pr.pluginsSkipped.join(", ")}`);
+            }
+            if (pr.pluginsFailed.length > 0) {
+              console.log(chalk.red(`  Failed ${pr.pluginsFailed.length}: ${pr.pluginsFailed.join(", ")}`));
+            }
+          }
+        }
+      }
     }
   });
 
@@ -137,8 +165,9 @@ program
   .description("Import config from a GitHub repo (owner/repo)")
   .option("--dry-run", "Show what would change without writing", false)
   .option("--verbose", "Show details", false)
+  .option("--skip-plugins", "Skip plugin restore after import", false)
   .action((repo, opts) => {
-    runUse({ repoArg: repo, dryRun: opts.dryRun, verbose: opts.verbose, backupBase: getBackupBase() });
+    runUse({ repoArg: repo, dryRun: opts.dryRun, verbose: opts.verbose, backupBase: getBackupBase(), skipPlugins: opts.skipPlugins });
     if (!opts.dryRun) console.log(chalk.green("✅ Config imported successfully"));
   });
 

@@ -51,6 +51,7 @@ export function runUse(options: {
   dryRun: boolean;
   verbose: boolean;
   backupBase: string;
+  skipPlugins?: boolean;
 }): void {
   const { repoArg, dryRun, verbose, backupBase } = options;
   const ref = parseRepoArg(repoArg);
@@ -88,7 +89,7 @@ export function runUse(options: {
       throw new Error(`Invalid manifest:\n${errors.map((e) => `  - ${e}`).join("\n")}`);
     }
 
-    runImport({ manifest, repoDir: tempDir, verbose, dryRun, sync: false, backupBase });
+    runImport({ manifest, repoDir: tempDir, verbose, dryRun, sync: false, backupBase, skipPlugins: options.skipPlugins });
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }

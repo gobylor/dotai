@@ -21,17 +21,20 @@ One-command full plugin restore: `dotai import` (or `dotai use`) syncs all plugi
 
 ### 1. Profile Changes (`src/profiles/claude.json`)
 
-**Add to `portable`:**
+**Add to** `portable`**:**
+
 - `plugins/known_marketplaces.json` — marketplace source registry (GitHub repos)
 - `plugins/blocklist.json` — user's plugin security preferences
 
-**Add to `ephemeral`:**
+**Add to** `ephemeral`**:**
+
 - `plugins/data/` — plugin runtime data
 - `plugins/marketplaces/` — cloned marketplace repos (re-cloned during install)
 - `plugins/repos/` — custom repo clones
 - `plugins/install-counts-cache.json` — analytics cache
 
 **Add new field:**
+
 ```json
 {
   "postImport": {
@@ -196,7 +199,7 @@ No code changes needed for export. The existing `runExport()` file-copy logic au
 ## Files Changed
 
 | File | Change |
-|------|--------|
+| --- | --- |
 | `src/types.ts` | Add `PostImportHook` interface, extend `ToolProfile` |
 | `src/profiles/claude.json` | Add portable/ephemeral entries, add `postImport` |
 | `src/lib/plugins.ts` | **New** — `restoreMarketplaces()`, `restorePlugins()` |
@@ -207,7 +210,8 @@ No code changes needed for export. The existing `runExport()` file-copy logic au
 
 ## Testing Strategy
 
-1. **Unit tests for `plugins.ts`:**
+1. **Unit tests for** `plugins.ts`**:**
+
    - Parse `installed_plugins.json` correctly
    - Parse `known_marketplaces.json` correctly
    - Skip local-scoped plugins with warning
@@ -216,6 +220,7 @@ No code changes needed for export. The existing `runExport()` file-copy logic au
    - Handle individual plugin install failures without aborting
 
 2. **Integration test:**
+
    - Mock `execFileSync` to capture commands
    - Verify correct marketplace add + plugin install commands are generated
    - Verify `--dry-run` produces output without executing

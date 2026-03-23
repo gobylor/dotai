@@ -3,20 +3,20 @@ import { resolve } from "node:path";
 import type { Manifest } from "../types.js";
 
 export function parseManifest(jsonString: string): Manifest {
-  return JSON.parse(jsonString) as Manifest;
-}
-
-export function readManifest(filePath: string): Manifest {
-  const content = readFileSync(filePath, "utf-8");
-  const data = parseManifest(content);
+  const data = JSON.parse(jsonString) as Manifest;
   const errors = validateManifest(data);
   if (errors.length > 0) {
-    throw new Error(`Invalid dotai.json:\n${errors.map((e) => `  - ${e}`).join("\n")}`);
+    throw new Error(`Invalid manifest:\n${errors.map((e) => `  - ${e}`).join("\n")}`);
   }
   return data;
 }
 
-export function validateManifest(data: any): string[] {
+export function readManifest(filePath: string): Manifest {
+  const content = readFileSync(filePath, "utf-8");
+  return parseManifest(content); // parseManifest now validates internally
+}
+
+export function validateManifest(data: Record<string, unknown> | Manifest): string[] {
   const errors: string[] = [];
   if (typeof data.version !== "number") {
     errors.push("Missing or invalid 'version' field (must be a number)");
@@ -25,8 +25,8 @@ export function validateManifest(data: any): string[] {
     errors.push("Missing or invalid 'tools' field (must be an object)");
     return errors;
   }
-  for (const [name, tool] of Object.entries(data.tools)) {
-    const t = tool as any;
+  for (const [name, tool] of Object.entries(data.tools as Record<string, unknown>)) {
+    const t = tool as Record<string, unknown>;
     if (!t.source || typeof t.source !== "string") {
       errors.push(`Tool '${name}': missing 'source' field`);
     }
@@ -41,6 +41,10 @@ export function validateManifest(data: any): string[] {
 }
 
 const KNOWN_CONFIG_DIRS = ["~/.claude", "~/.codex", "~/.cursor", "~/.windsurf", "~/.aider"];
+
+export function getKnownConfigDirs(): string[] {
+  return [...KNOWN_CONFIG_DIRS];
+}
 
 export function isKnownConfigDir(source: string): boolean {
   // Normalize: expand ~ and resolve ../ sequences for ALL paths (tilde and absolute)

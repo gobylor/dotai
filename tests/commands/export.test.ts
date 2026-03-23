@@ -36,6 +36,20 @@ describe("export command", () => {
     expect(readFileSync(join(repoDir, "README.md"), "utf-8")).toContain("test");
   });
 
+  it("does not include tool in toolsExported when all files are in-sync", () => {
+    const machineDir = join(tempDir, "machine");
+    const repoDir = join(tempDir, "repo");
+    writeFixture(machineDir, "settings.json", '{"a":1}');
+    writeFixture(repoDir, "test/settings.json", '{"a":1}');
+    const manifest: Manifest = {
+      version: 1,
+      tools: { test: { source: machineDir, include: ["settings.json"], exclude: [] } },
+    };
+    const result = runExport({ manifest, repoDir, verbose: false });
+    expect(result.toolsExported).toEqual([]);
+    expect(result.filesCopied).toBe(0);
+  });
+
   it("respects --only flag", () => {
     const machine1 = join(tempDir, "m1");
     const machine2 = join(tempDir, "m2");

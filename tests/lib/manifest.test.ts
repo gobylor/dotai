@@ -1,5 +1,7 @@
-import { describe, it, expect } from "vitest";
-import { parseManifest, validateManifest, isKnownConfigDir } from "../../src/lib/manifest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { join } from "node:path";
+import { createTempDir, cleanupTempDir, writeFixture } from "../helpers";
+import { parseManifest, readManifest, validateManifest, isKnownConfigDir } from "../../src/lib/manifest";
 
 const VALID_MANIFEST = {
   version: 1,
@@ -12,6 +14,10 @@ const VALID_MANIFEST = {
   },
 };
 
+let tempDir: string;
+beforeEach(() => { tempDir = createTempDir(); });
+afterEach(() => { cleanupTempDir(tempDir); });
+
 describe("manifest", () => {
   it("parses valid JSON string", () => {
     const result = parseManifest(JSON.stringify(VALID_MANIFEST));
@@ -20,6 +26,21 @@ describe("manifest", () => {
   });
   it("throws on invalid JSON", () => {
     expect(() => parseManifest("not json")).toThrow();
+  });
+  it("parseManifest throws on invalid manifest", () => {
+    expect(() => parseManifest('{"version":"bad"}')).toThrow("Invalid manifest");
+  });
+  it("readManifest throws on invalid file", () => {
+    const filePath = join(tempDir, "bad.json");
+    writeFixture(tempDir, "bad.json", '{"version":"bad"}');
+    expect(() => readManifest(filePath)).toThrow("Invalid manifest");
+  });
+  it("readManifest returns valid manifest from file", () => {
+    const filePath = join(tempDir, "good.json");
+    writeFixture(tempDir, "good.json", JSON.stringify(VALID_MANIFEST));
+    const result = readManifest(filePath);
+    expect(result.version).toBe(1);
+    expect(result.tools.claude.source).toBe("~/.claude");
   });
   it("validates a correct manifest", () => {
     const errors = validateManifest(VALID_MANIFEST);
@@ -40,6 +61,15 @@ describe("manifest", () => {
     const errors = validateManifest(bad as any);
     expect(errors.length).toBeGreaterThan(0);
     expect(errors[0]).toContain("source");
+  });
+  it("readManifest throws ENOENT for missing file", () => {
+    const missingPath = join(tempDir, "nonexistent.json");
+    expect(() => readManifest(missingPath)).toThrow();
+  });
+  it("readManifest throws on invalid JSON in file", () => {
+    const filePath = join(tempDir, "broken.json");
+    writeFixture(tempDir, "broken.json", "{ not valid json }}}");
+    expect(() => readManifest(filePath)).toThrow();
   });
 });
 

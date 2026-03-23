@@ -74,6 +74,30 @@ describe("createBackup", () => {
   });
 });
 
+describe("createBackup with filesToBackup", () => {
+  it("only copies specified files when filesToBackup is provided", () => {
+    const src = join(tempDir, "config");
+    const backupBase = join(tempDir, "backups");
+    writeFixture(src, "a.json", '{"a":1}');
+    writeFixture(src, "b.json", '{"b":2}');
+    writeFixture(src, "c.json", '{"c":3}');
+    const backupPath = createBackup(src, backupBase, "claude", ["a.json"]);
+    expect(existsSync(join(backupPath, "a.json"))).toBe(true);
+    expect(existsSync(join(backupPath, "b.json"))).toBe(false);
+    expect(existsSync(join(backupPath, "c.json"))).toBe(false);
+    expect(readFileSync(join(backupPath, "a.json"), "utf-8")).toBe('{"a":1}');
+  });
+  it("copies everything when filesToBackup is not provided", () => {
+    const src = join(tempDir, "config");
+    const backupBase = join(tempDir, "backups");
+    writeFixture(src, "a.json", '{"a":1}');
+    writeFixture(src, "b.json", '{"b":2}');
+    const backupPath = createBackup(src, backupBase, "claude");
+    expect(existsSync(join(backupPath, "a.json"))).toBe(true);
+    expect(existsSync(join(backupPath, "b.json"))).toBe(true);
+  });
+});
+
 describe("filesAreEqual", () => {
   it("returns true for identical files", () => {
     writeFixture(tempDir, "a.txt", "same");
@@ -84,5 +108,14 @@ describe("filesAreEqual", () => {
     writeFixture(tempDir, "a.txt", "one");
     writeFixture(tempDir, "b.txt", "two");
     expect(filesAreEqual(join(tempDir, "a.txt"), join(tempDir, "b.txt"))).toBe(false);
+  });
+  it("returns false immediately when file sizes differ", () => {
+    writeFixture(tempDir, "small.txt", "hi");
+    writeFixture(tempDir, "large.txt", "hello world this is much longer");
+    expect(filesAreEqual(join(tempDir, "small.txt"), join(tempDir, "large.txt"))).toBe(false);
+  });
+  it("returns false when one file does not exist", () => {
+    writeFixture(tempDir, "exists.txt", "hello");
+    expect(filesAreEqual(join(tempDir, "exists.txt"), join(tempDir, "missing.txt"))).toBe(false);
   });
 });

@@ -13,8 +13,17 @@ interface DoctorResult {
   healthy: boolean;
 }
 
-const CREDENTIAL_PATTERNS = ["auth.json", ".env", "credentials.json", "*.key", "*.pem", "token.json"];
+const CREDENTIAL_PATTERNS = [
+  "auth.json", ".env", "credentials.json", "*.key", "*.pem",
+  "*.p12", "*.pfx", "*.jks",
+  "id_rsa", "id_ed25519", "id_ecdsa", "id_dsa",
+  ".netrc", ".npmrc",
+  "secrets.json", "service-account.json", "token.json",
+];
 
+// TODO(perf): scanForCredentials, scanForStalePaths, and resolveFiles each traverse
+// the tool directories independently. Could be combined into a single traversal for
+// large config directories, but the current approach is simpler and config dirs are small.
 export function runDoctor(options: { manifest: Manifest; repoDir: string }): DoctorResult {
   const { manifest, repoDir } = options;
   const schemaErrors = validateManifest(manifest);

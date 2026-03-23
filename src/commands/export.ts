@@ -29,6 +29,7 @@ export function runExport(options: ExportOptions): ExportResult {
 
     const resolved = resolveFiles(manifest, repoDir, toolName);
 
+    let toolFilesCopied = 0;
     for (const file of resolved.files) {
       // Export machine-only and modified files to repo
       if (file.state === "machine-only" || file.state === "modified") {
@@ -39,15 +40,20 @@ export function runExport(options: ExportOptions): ExportResult {
             copyFile(file.machinePath, file.repoPath);
           }
           if (verbose) console.log(`  ${toolName}: ${file.relativePath}`);
+          toolFilesCopied++;
           filesCopied++;
         } catch {
-          if (verbose) console.log(`  ⚠ ${toolName}: ${file.relativePath} skipped (error)`);
+          console.warn(`  Warning: ${toolName}/${file.relativePath} skipped (copy error)`);
         }
       }
     }
-    toolsExported.push(toolName);
+    if (toolFilesCopied > 0) {
+      toolsExported.push(toolName);
+    }
   }
 
-  writeFileSync(join(repoDir, "README.md"), generateReadme(manifest), "utf-8");
+  if (filesCopied > 0) {
+    writeFileSync(join(repoDir, "README.md"), generateReadme(manifest), "utf-8");
+  }
   return { filesCopied, toolsExported };
 }

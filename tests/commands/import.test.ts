@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createTempDir, cleanupTempDir, writeFixture } from "../helpers";
@@ -130,6 +130,40 @@ describe("import command", () => {
     });
     expect(result.pluginRestore).toBeDefined();
     expect(result.pluginRestore!.pluginsInstalled).toContain("test-plugin@test-mkt");
+  });
+
+  it("logs warning when plugin manifest is corrupt (not ENOENT)", () => {
+    const machineDir = join(tempDir, "machine");
+    const repoDir = join(tempDir, "repo");
+    // Write corrupt binary data to the plugin manifest file
+    writeFixture(machineDir, "plugins/installed_plugins.json", "\x00\x01\x02 corrupt binary");
+    writeFixture(machineDir, "plugins/known_marketplaces.json", "{}");
+    writeFixture(repoDir, "claude/plugins/installed_plugins.json", "\x00\x01\x02 corrupt binary");
+    writeFixture(repoDir, "claude/plugins/known_marketplaces.json", "{}");
+
+    const manifest: Manifest = {
+      version: 1,
+      tools: {
+        claude: {
+          source: machineDir,
+          include: ["plugins/installed_plugins.json", "plugins/known_marketplaces.json"],
+          exclude: [],
+        },
+      },
+    };
+
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const result = runImport({
+        manifest, repoDir, verbose: false, dryRun: true, sync: false,
+        backupBase: join(tempDir, "backups"),
+      });
+      // Plugin restore should have failed due to corrupt JSON, warning should be logged
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("Plugin restore failed"));
+      expect(result.pluginRestore).toBeUndefined();
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 
   it("skipPlugins prevents plugin restore", () => {

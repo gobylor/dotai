@@ -7,7 +7,6 @@ import {
   readFileSync,
   readdirSync,
   readlinkSync,
-  rmSync,
   statSync,
   symlinkSync,
 } from "node:fs";
@@ -50,17 +49,31 @@ function _copyDirRecursive(src: string, dst: string): void {
   }
 }
 
-export function createBackup(sourceDir: string, backupBase: string, label: string): string {
+export function createBackup(sourceDir: string, backupBase: string, label: string, filesToBackup?: string[]): string {
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
   const backupDir = join(backupBase, `backup-${timestamp}`, label);
   mkdirSync(backupDir, { recursive: true });
-  // Use cpSync for faithful backup — preserves .git, unlike copyDir which strips it
-  cpSync(sourceDir, backupDir, { recursive: true });
+
+  if (filesToBackup && filesToBackup.length > 0) {
+    // Selective backup: only copy files that will be overwritten
+    for (const relPath of filesToBackup) {
+      const srcPath = join(sourceDir, relPath);
+      if (existsSync(srcPath)) {
+        copyFile(srcPath, join(backupDir, relPath));
+      }
+    }
+  } else {
+    // Fallback: full directory copy (preserves backward compatibility)
+    cpSync(sourceDir, backupDir, { recursive: true });
+  }
   return backupDir;
 }
 
 export function filesAreEqual(pathA: string, pathB: string): boolean {
   try {
+    const statA = statSync(pathA);
+    const statB = statSync(pathB);
+    if (statA.size !== statB.size) return false;
     const a = readFileSync(pathA);
     const b = readFileSync(pathB);
     return a.equals(b);
@@ -69,6 +82,3 @@ export function filesAreEqual(pathA: string, pathB: string): boolean {
   }
 }
 
-export function deleteFile(filePath: string): void {
-  rmSync(filePath, { force: true });
-}

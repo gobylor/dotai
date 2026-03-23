@@ -31,17 +31,23 @@ export function resolveFiles(
 
   for (const inc of tool.include) {
     const machinePath = join(machineBase, inc);
-    if (existsSync(machinePath)) {
-      if (statSync(machinePath).isDirectory()) {
+    try {
+      const stat = statSync(machinePath);
+      if (stat.isDirectory()) {
         walkDir(machinePath, machineBase, allPaths);
       } else {
         allPaths.add(inc);
       }
+    } catch {
+      // Path does not exist on machine -- skip
     }
   }
 
-  if (existsSync(repoBase)) {
+  try {
+    statSync(repoBase);
     walkDir(repoBase, repoBase, allPaths);
+  } catch {
+    // Repo directory does not exist -- skip
   }
 
   // Filter out excluded paths
@@ -81,10 +87,15 @@ export function resolveFiles(
 }
 
 function walkDir(dir: string, base: string, out: Set<string>): void {
-  if (!existsSync(dir)) return;
-  const entries = readdirSync(dir, { withFileTypes: true });
+  let entries;
+  try {
+    entries = readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return; // Skip unreadable directories (permission denied, etc.)
+  }
   for (const entry of entries) {
     if (entry.name === ".git" && entry.isDirectory()) continue;
+    if (entry.isSymbolicLink()) continue; // Never follow symlinks (SEC-01)
     const fullPath = join(dir, entry.name);
     if (entry.isDirectory()) {
       walkDir(fullPath, base, out);

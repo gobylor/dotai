@@ -29,7 +29,7 @@ npx @openlor/dotai use <your-github-user>/dotai-config
 |---------|-------------|
 | `dotai init` | Auto-discover AI CLIs, generate `dotai.json` manifest + `.gitignore` |
 | `dotai export` | Copy configs from machine to repo, auto-generate README |
-| `dotai import` | Copy configs from repo to machine (with backup) |
+| `dotai import` | Copy configs from repo to machine (with backup), restore plugins |
 | `dotai diff` | Show differences between repo and machine |
 | `dotai status` | Sync summary dashboard |
 | `dotai use <user/repo>` | Import config from a GitHub repo |
@@ -42,6 +42,7 @@ npx @openlor/dotai use <your-github-user>/dotai-config
 | `--only <tool>` | export, import, diff, status | Operate on a single tool only |
 | `--dry-run` | import, use | Preview changes without writing |
 | `--sync` | import | Delete machine files not in repo (with backup) |
+| `--skip-plugins` | import, use | Skip automatic plugin restore |
 | `--verbose` | export, import, use | Show per-file operations |
 
 ## How It Works
@@ -85,7 +86,16 @@ Every managed file is in one of four states:
 | `repo-only` | In repo but not on machine |
 | `machine-only` | On machine but not in repo |
 
-### 4. Security
+### 4. Plugin Sync (Claude Code)
+
+When importing Claude Code configs, dotai automatically restores your plugins:
+1. Registers missing marketplaces via `claude plugins marketplace add`
+2. Installs missing plugins via `claude plugins install`
+3. Skips local/project-scoped plugins with a warning
+
+Use `--skip-plugins` to disable, or `--dry-run` to preview.
+
+### 5. Security
 
 - **No transformation** — files are copied exactly as-is
 - `dotai doctor` scans for credential files accidentally in repo

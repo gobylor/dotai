@@ -1,3 +1,9 @@
+export interface PostImportHook {
+  type: "claude-plugins";
+  manifestFile: string;
+  marketplacesFile: string;
+}
+
 export interface ToolProfile {
   name: string;
   description: string;
@@ -5,6 +11,7 @@ export interface ToolProfile {
   portable: string[];
   ephemeral: string[];
   credentials: string[];
+  postImport?: PostImportHook;
 }
 
 export interface ManifestTool {

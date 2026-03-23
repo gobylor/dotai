@@ -63,4 +63,87 @@ describe("import command", () => {
     expect(existsSync(join(machineDir, "settings.json"))).toBe(true);
     expect(existsSync(join(machineDir, "extra.json"))).toBe(false);
   });
+
+  it("accepts skipPlugins option without error", () => {
+    const machineDir = join(tempDir, "machine");
+    const repoDir = join(tempDir, "repo");
+    writeFixture(repoDir, "test/settings.json", '{"imported":true}');
+    const manifest: Manifest = {
+      version: 1,
+      tools: { test: { source: machineDir, include: ["settings.json"], exclude: [] } },
+    };
+    const result = runImport({
+      manifest, repoDir, verbose: false, dryRun: false, sync: false,
+      backupBase: join(tempDir, "backups"), skipPlugins: true,
+    });
+    expect(result.filesImported).toBe(1);
+    expect(result.pluginRestore).toBeUndefined();
+  });
+
+  it("dry-run returns pluginRestore without executing CLI commands", () => {
+    const machineDir = join(tempDir, "machine");
+    const repoDir = join(tempDir, "repo");
+    writeFixture(machineDir, "plugins/installed_plugins.json", JSON.stringify({
+      version: 2,
+      plugins: {
+        "test-plugin@test-mkt": [
+          { scope: "user", installPath: "/x", version: "1.0", installedAt: "2026-01-01T00:00:00Z", lastUpdated: "2026-01-01T00:00:00Z", gitCommitSha: "aaa" },
+        ],
+      },
+    }));
+    writeFixture(machineDir, "plugins/known_marketplaces.json", JSON.stringify({
+      "test-mkt": {
+        source: { source: "github", repo: "test/test-marketplace" },
+        installLocation: "/x",
+        lastUpdated: "2026-01-01T00:00:00Z",
+      },
+    }));
+    writeFixture(repoDir, "claude/plugins/installed_plugins.json", JSON.stringify({
+      version: 2,
+      plugins: {
+        "test-plugin@test-mkt": [
+          { scope: "user", installPath: "/x", version: "1.0", installedAt: "2026-01-01T00:00:00Z", lastUpdated: "2026-01-01T00:00:00Z", gitCommitSha: "aaa" },
+        ],
+      },
+    }));
+    writeFixture(repoDir, "claude/plugins/known_marketplaces.json", JSON.stringify({
+      "test-mkt": {
+        source: { source: "github", repo: "test/test-marketplace" },
+        installLocation: "/x",
+        lastUpdated: "2026-01-01T00:00:00Z",
+      },
+    }));
+
+    const manifest: Manifest = {
+      version: 1,
+      tools: {
+        claude: {
+          source: machineDir,
+          include: ["plugins/installed_plugins.json", "plugins/known_marketplaces.json"],
+          exclude: [],
+        },
+      },
+    };
+    const result = runImport({
+      manifest, repoDir, verbose: false, dryRun: true, sync: false,
+      backupBase: join(tempDir, "backups"),
+    });
+    expect(result.pluginRestore).toBeDefined();
+    expect(result.pluginRestore!.pluginsInstalled).toContain("test-plugin@test-mkt");
+  });
+
+  it("skipPlugins prevents plugin restore", () => {
+    const machineDir = join(tempDir, "machine");
+    const repoDir = join(tempDir, "repo");
+    writeFixture(repoDir, "test/settings.json", '{"imported":true}');
+    const manifest: Manifest = {
+      version: 1,
+      tools: { test: { source: machineDir, include: ["settings.json"], exclude: [] } },
+    };
+    const result = runImport({
+      manifest, repoDir, verbose: false, dryRun: false, sync: false,
+      backupBase: join(tempDir, "backups"), skipPlugins: true,
+    });
+    expect(result.pluginRestore).toBeUndefined();
+  });
 });

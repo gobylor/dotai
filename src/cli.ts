@@ -82,30 +82,34 @@ program
       console.log(chalk.green(`✅ Imported ${result.toolsImported.join(", ")} (${result.filesImported} files)`));
       for (const bp of result.backupPaths) console.log(`  Backup: ${bp}`);
       if (result.filesDeleted > 0) console.log(`  Deleted ${result.filesDeleted} machine-only files (--sync)`);
-      if (result.pluginRestore) {
-        const pr = result.pluginRestore;
-        if (pr.claudeCliMissing) {
-          console.log(chalk.yellow("\n⚠ claude CLI not found — skipping plugin restore. Install plugins manually."));
-        } else {
-          const hasOutput = pr.marketplacesAdded.length > 0 || pr.pluginsInstalled.length > 0 ||
-            pr.pluginsWarned.length > 0 || pr.pluginsSkipped.length > 0 || pr.pluginsFailed.length > 0;
-          if (hasOutput) {
-            console.log(chalk.bold("\n🔌 Plugin restore:"));
-            if (pr.marketplacesAdded.length > 0) {
-              console.log(`  Added ${pr.marketplacesAdded.length} marketplace(s): ${pr.marketplacesAdded.join(", ")}`);
-            }
-            if (pr.pluginsInstalled.length > 0) {
-              console.log(chalk.green(`  Installed ${pr.pluginsInstalled.length} plugin(s): ${pr.pluginsInstalled.join(", ")}`));
-            }
-            for (const w of pr.pluginsWarned) {
-              console.log(chalk.yellow(`  ⚠ Skipped local/project plugin: ${w}`));
-            }
-            if (pr.pluginsSkipped.length > 0) {
-              console.log(`  Skipped ${pr.pluginsSkipped.length} already installed: ${pr.pluginsSkipped.join(", ")}`);
-            }
-            if (pr.pluginsFailed.length > 0) {
-              console.log(chalk.red(`  Failed ${pr.pluginsFailed.length}: ${pr.pluginsFailed.join(", ")}`));
-            }
+    }
+    if (result.pluginRestore) {
+      const pr = result.pluginRestore;
+      if (pr.claudeCliMissing) {
+        console.log(chalk.yellow("\n⚠ claude CLI not found — skipping plugin restore. Install plugins manually."));
+      } else {
+        const hasOutput = pr.marketplacesAdded.length > 0 || pr.pluginsInstalled.length > 0 ||
+          pr.pluginsWarned.length > 0 || pr.pluginsSkipped.length > 0 ||
+          pr.pluginsFailed.length > 0 || pr.marketplacesFailed.length > 0;
+        if (hasOutput) {
+          console.log(chalk.bold(`\n🔌 Plugin restore${opts.dryRun ? " (dry-run preview)" : ""}:`));
+          if (pr.marketplacesAdded.length > 0) {
+            console.log(`  ${opts.dryRun ? "Would add" : "Added"} ${pr.marketplacesAdded.length} marketplace(s): ${pr.marketplacesAdded.join(", ")}`);
+          }
+          if (pr.marketplacesFailed.length > 0) {
+            console.log(chalk.red(`  Failed to add ${pr.marketplacesFailed.length} marketplace(s): ${pr.marketplacesFailed.join(", ")}`));
+          }
+          if (pr.pluginsInstalled.length > 0) {
+            console.log(chalk.green(`  ${opts.dryRun ? "Would install" : "Installed"} ${pr.pluginsInstalled.length} plugin(s): ${pr.pluginsInstalled.join(", ")}`));
+          }
+          for (const w of pr.pluginsWarned) {
+            console.log(chalk.yellow(`  ⚠ Skipped local/project plugin: ${w}`));
+          }
+          if (pr.pluginsSkipped.length > 0) {
+            console.log(`  Skipped ${pr.pluginsSkipped.length} already installed: ${pr.pluginsSkipped.join(", ")}`);
+          }
+          if (pr.pluginsFailed.length > 0) {
+            console.log(chalk.red(`  Failed ${pr.pluginsFailed.length}: ${pr.pluginsFailed.join(", ")}`));
           }
         }
       }

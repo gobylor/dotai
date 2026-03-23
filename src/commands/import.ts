@@ -85,8 +85,10 @@ export function runImport(options: ImportOptions): ImportResult {
   if (!skipPlugins) {
     for (const toolName of toolNames) {
       const profile = getProfile(toolName);
+      const toolEntry = manifest.tools[toolName];
+      if (!toolEntry) continue;
       if (profile?.postImport?.type === "claude-plugins") {
-        const machineBase = expandHome(manifest.tools[toolName].source);
+        const machineBase = expandHome(toolEntry.source);
         const manifestFile = join(machineBase, profile.postImport.manifestFile);
         const marketplacesFile = join(machineBase, profile.postImport.marketplacesFile);
 

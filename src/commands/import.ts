@@ -88,21 +88,30 @@ export function runImport(options: ImportOptions): ImportResult {
       const toolEntry = manifest.tools[toolName];
       if (!toolEntry) continue;
       if (profile?.postImport?.type === "claude-plugins") {
-        const machineBase = expandHome(toolEntry.source);
-        const manifestFile = join(machineBase, profile.postImport.manifestFile);
-        const marketplacesFile = join(machineBase, profile.postImport.marketplacesFile);
+        // In dry-run mode, read from repo (files weren't copied to machine).
+        // In live mode, read from machine (files were just copied).
+        const readBase = dryRun
+          ? join(repoDir, toolName)
+          : expandHome(toolEntry.source);
+        const manifestFile = join(readBase, profile.postImport.manifestFile);
+        const marketplacesFile = join(readBase, profile.postImport.marketplacesFile);
 
         let installedPluginsJson = "{}";
         let knownMarketplacesJson = "{}";
         try { installedPluginsJson = readFileSync(manifestFile, "utf-8"); } catch {}
         try { knownMarketplacesJson = readFileSync(marketplacesFile, "utf-8"); } catch {}
 
-        pluginRestore = restoreClaudePlugins({
-          installedPluginsJson,
-          knownMarketplacesJson,
-          dryRun,
-          verbose,
-        });
+        try {
+          pluginRestore = restoreClaudePlugins({
+            installedPluginsJson,
+            knownMarketplacesJson,
+            dryRun,
+            verbose,
+          });
+        } catch {
+          // Non-fatal: malformed JSON or unexpected error in plugin restore
+          // should not abort the import
+        }
       }
     }
   }

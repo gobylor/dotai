@@ -1,7 +1,7 @@
 // --- Data types ---
 
 export interface ParsedPlugin {
-  key: string;
+  key: string;            // "pluginName@marketplaceName"
   scope: "user" | "local" | "project";
   projectPath?: string;
   version: string;
@@ -10,16 +10,16 @@ export interface ParsedPlugin {
 
 export interface ParsedMarketplace {
   name: string;
-  addArg: string;
+  addArg: string;         // argument for `claude plugins marketplace add`
 }
 
-interface PluginFilterResult {
+export interface PluginFilterResult {
   toInstall: ParsedPlugin[];
-  skipped: ParsedPlugin[];
-  warned: ParsedPlugin[];
+  skipped: ParsedPlugin[];     // already installed
+  warned: ParsedPlugin[];      // local/project scoped
 }
 
-interface MarketplaceFilterResult {
+export interface MarketplaceFilterResult {
   toAdd: ParsedMarketplace[];
   skipped: ParsedMarketplace[];
 }
@@ -32,6 +32,7 @@ export function parseInstalledPlugins(json: string): ParsedPlugin[] {
   for (const [key, entries] of Object.entries(data.plugins ?? {})) {
     const arr = entries as any[];
     if (arr.length === 0) continue;
+    // Sort by installedAt descending, take most recent
     const sorted = [...arr].sort(
       (a, b) => new Date(b.installedAt).getTime() - new Date(a.installedAt).getTime()
     );
@@ -60,9 +61,13 @@ export function getPluginsToRestore(plugins: ParsedPlugin[], alreadyInstalled: S
   const skipped: ParsedPlugin[] = [];
   const warned: ParsedPlugin[] = [];
   for (const plugin of plugins) {
-    if (plugin.scope === "local" || plugin.scope === "project") { warned.push(plugin); }
-    else if (alreadyInstalled.has(plugin.key)) { skipped.push(plugin); }
-    else { toInstall.push(plugin); }
+    if (plugin.scope === "local" || plugin.scope === "project") {
+      warned.push(plugin);
+    } else if (alreadyInstalled.has(plugin.key)) {
+      skipped.push(plugin);
+    } else {
+      toInstall.push(plugin);
+    }
   }
   return { toInstall, skipped, warned };
 }
@@ -71,8 +76,11 @@ export function getMarketplacesToRestore(marketplaces: ParsedMarketplace[], alre
   const toAdd: ParsedMarketplace[] = [];
   const skipped: ParsedMarketplace[] = [];
   for (const mkt of marketplaces) {
-    if (alreadyRegistered.has(mkt.name)) { skipped.push(mkt); }
-    else { toAdd.push(mkt); }
+    if (alreadyRegistered.has(mkt.name)) {
+      skipped.push(mkt);
+    } else {
+      toAdd.push(mkt);
+    }
   }
   return { toAdd, skipped };
 }
